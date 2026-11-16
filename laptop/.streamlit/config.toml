@@ -1,0 +1,16 @@
+# Chỉ mở dashboard trên chính laptop (không cho máy khác trong mạng Wi-Fi truy cập)
+[server]
+address = "localhost"
+port = 8501
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+# Màu theo phong cách shadcn/ui (tông đen – trắng – xám)
+[theme]
+base = "light"
+primaryColor = "#18181b"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f4f5"
+textColor = "#09090b"

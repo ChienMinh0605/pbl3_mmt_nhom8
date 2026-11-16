@@ -1,0 +1,8 @@
+pyserial>=3.5
+numpy
+pandas
+scikit-learn
+joblib
+# XGBoost: bản chỉ dùng CPU, nhẹ hơn nhiều so với gói "xgboost" đầy đủ
+xgboost-cpu
+streamlit

@@ -1,0 +1,18 @@
+# không đưa lên Git
+laptop/logger_config.json
+data/
+results/
+models/
+__pycache__/
+*.pyc
+
+# bài báo tham khảo (bản quyền) và tài liệu Word nội bộ
+*.pdf
+*.docx
+~$*
+.~lock*
+
+# build firmware
+build/
+.pio/
+sdkconfig.old
