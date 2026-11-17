@@ -16,7 +16,7 @@ Cấu hình lưu tại `configs/probe.json`:
 | AT | 2 khe có Probe để xác nhận |
 | WT | 2 khe trống liên tiếp để hủy ứng viên |
 | DT | 3 khe thiếu quan sát để hết hiệu lực xác nhận |
-| RSSI tối thiểu | −65 dBm, ngưỡng thử ban đầu, có thể đổi trên dashboard |
+| RSSI tối thiểu | −127 dBm: tắt cắt RSSI bổ sung, có thể đổi trên dashboard |
 | Heartbeat timeout | 5 giây |
 
 Đây là cấu hình thử ban đầu, chưa hiệu chỉnh theo phòng. Một vòng nhảy kênh
@@ -25,15 +25,15 @@ sau đúng hai phút. Khi mất heartbeat, số đếm không còn hợp lệ.
 
 Luồng: Probe → chốt khe → chờ xác nhận → đã xác nhận → thiếu quan sát → hết hiệu lực.
 Nguồn có Probe trở lại khi đang thiếu quan sát được chuyển về đã xác nhận.
-Xem `docs/ALGORITHM.md` để biết quy ước đếm khe và sự kiện chính xác.
+Xem `DAC_TA_DU_AN.md` để biết quy ước đếm khe và sự kiện chính xác.
 
 ## Sử dụng
 
 - Mở http://localhost:5173 (bản phát triển) hoặc http://127.0.0.1:8000 (bản đã build).
-- Khi đã kết nối, tổng quan tự hiển thị dữ liệu thật thay cho demo.
-- Sau khi khởi động lại backend: vào Cấu hình thu, chọn `/dev/ttyUSB0`, Kết nối USB.
-- Xem Nguồn quan sát để kiểm tra trạng thái từng MAC.
-- Muốn lưu thực nghiệm: nhập phòng, mô tả và số thiết bị thật tại Phiên thử nghiệm,
+- Dashboard không tự bật demo; chỉ phát mô phỏng khi bấm Chạy demo nhanh.
+- Sau khi khởi động lại backend: vào Kết nối & quan sát, chọn `/dev/ttyUSB0`, Kết nối USB.
+- Xem bảng Nguồn đang theo dõi để kiểm tra trạng thái từng MAC.
+- Muốn lưu thực nghiệm: nhập phòng, mô tả và số thiết bị thật tại Ghi phiên & nhãn,
   rồi Bắt đầu ghi. Không có nhãn thực tế được tạo tự động khi thiết lập board.
 - Thay đổi AT/WT/DT: kết thúc phiên, ngắt nguồn trong giao diện, chỉnh cấu hình
   trong công cụ nâng cao rồi kết nối lại. Không cần nạp lại firmware cho AT/WT/DT.
@@ -52,7 +52,7 @@ không có dấu cách/ngoặc; thư mục `/tmp` có thể bị dọn khi khở
 
 ## Điều chỉnh phạm vi bằng RSSI
 
-Trong Tổng quan, mở Phạm vi quan sát, chọn ngưỡng rồi Áp dụng bộ lọc. Không cần
+Trong Kết nối & quan sát, mở Điều chỉnh phạm vi bằng RSSI, chọn ngưỡng rồi Áp dụng bộ lọc. Không cần
 ngắt USB hay nạp lại firmware. Khi đang ghi, chọn lưu phiên và tiếp tục phiên mới
 để mỗi phiên có một cấu hình RSSI nhất quán. Đổi ngưỡng sẽ xóa suy luận cũ và
 xác nhận lại các MAC; bộ đếm lọc bắt đầu lại. RSSI lọc Probe trước cả Sherlock,

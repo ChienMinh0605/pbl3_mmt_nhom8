@@ -64,7 +64,7 @@ trạng thái sẽ tự khắc phục MAC randomization.
 2. Kiểm tra một burst nhiều gói không biến thành nhiều khe dương.
 3. Kiểm tra candidate bị hủy bởi WT, departing quay lại present khi thấy gói.
 4. Kiểm tra rút USB, reset board, radio inactive, hết replay -> không giả count0.
-5. Đối chiếu cùng raw giữa live và đánh giá offline; đọc quy ước ALGORITHM.md.
+5. Đối chiếu cùng raw giữa live và đánh giá offline; đọc quy ước ../DAC_TA_DU_AN.md.
 6. Chuyển về tham chiếu slot60/AT6/WT2/DT6. RSSI mặc định không cắt bổ sung.
 
 **Điều kiện qua:** có bảng minh chứng quy tắc chuyển trạng thái và các tình

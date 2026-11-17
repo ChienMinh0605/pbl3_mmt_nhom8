@@ -3,7 +3,7 @@
   "arrival_slots": 2,
   "withdrawal_slots": 2,
   "departure_slots": 3,
-  "rssi_min": -65,
+  "rssi_min": -127,
   "unique_window_s": 60.0,
   "timeout_s": 120.0,
   "confirm_window_s": 30.0,
