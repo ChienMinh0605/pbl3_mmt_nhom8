@@ -1,0 +1,11 @@
+.venv/
+node_modules/
+__pycache__/
+.pytest_cache/
+.env
+firmware/*/build/
+firmware/*/sdkconfig*
+!firmware/*/sdkconfig.defaults
+frontend/dist/
+data/runtime/
+data/results/
