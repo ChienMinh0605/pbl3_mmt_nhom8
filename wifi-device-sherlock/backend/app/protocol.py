@@ -33,7 +33,7 @@ class Status(Wire):
     invalid: int = Field(ge=0)
     serial_errors: int = Field(ge=0)
     bytes_written: int = Field(ge=0)
-    serial_baud: Literal[921600]
+    serial_baud: Literal[460800]
     sniffer_enabled: bool
     scan_mode: Literal['fixed','hopping']
     dwell_ms: int = Field(ge=100,le=10000)

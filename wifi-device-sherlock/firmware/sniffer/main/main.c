@@ -60,7 +60,7 @@ static void output_task(void *arg) {
                 cJSON_AddNumberToObject(j,"channel",ch);
                 cJSON_AddNumberToObject(j,"probe_seen",atomic_load(&seen));cJSON_AddNumberToObject(j,"probe_dropped",atomic_load(&dropped));
                 cJSON_AddNumberToObject(j,"invalid",atomic_load(&invalid));cJSON_AddNumberToObject(j,"serial_errors",atomic_load(&serial_errors));
-                cJSON_AddNumberToObject(j,"bytes_written",atomic_load(&bytes_written));cJSON_AddNumberToObject(j,"serial_baud",921600);
+                cJSON_AddNumberToObject(j,"bytes_written",atomic_load(&bytes_written));cJSON_AddNumberToObject(j,"serial_baud",460800);
                 cJSON_AddBoolToObject(j,"sniffer_enabled",true);
 #ifdef CONFIG_PROBE_HOPPING
                 cJSON_AddStringToObject(j,"scan_mode","hopping");
@@ -81,7 +81,7 @@ static void output_task(void *arg) {
 void app_main(void) {
     snprintf(boot,sizeof(boot),"%08" PRIx32 "%08" PRIx32,esp_random(),esp_random());
     queue=xQueueCreate(128,sizeof(item_t));configASSERT(queue);
-    uart_config_t u={.baud_rate=921600,.data_bits=UART_DATA_8_BITS,.parity=UART_PARITY_DISABLE,
+    uart_config_t u={.baud_rate=460800,.data_bits=UART_DATA_8_BITS,.parity=UART_PARITY_DISABLE,
         .stop_bits=UART_STOP_BITS_1,.flow_ctrl=UART_HW_FLOWCTRL_DISABLE,.source_clk=UART_SCLK_DEFAULT};
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0,&u));ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0,1024,8192,0,NULL,0));
     sniffer_init();wifi_init_config_t init=WIFI_INIT_CONFIG_DEFAULT();ESP_ERROR_CHECK(esp_wifi_init(&init));

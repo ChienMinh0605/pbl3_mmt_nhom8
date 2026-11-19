@@ -9,3 +9,5 @@ firmware/*/sdkconfig*
 frontend/dist/
 data/runtime/
 data/results/
+firmware/*/managed_components/
+firmware/*/dependencies.lock

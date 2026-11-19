@@ -3,7 +3,7 @@
 Ngày thiết lập: 2026-11-14. ESP32-C3 qua USB Serial CH340 tại `/dev/ttyUSB0`.
 
 Firmware `firmware/sniffer` được build bằng ESP-IDF v5.5.4, UART0 GPIO21/20,
-921600 baud. Thu thụ động Probe Request trên WiFi 2.4 GHz, country VN,
+460800 baud. Thu thụ động Probe Request trên WiFi 2.4 GHz, country VN,
 hopping kênh 1–13, dwell 3000 ms/kênh. Không cần kết nối board vào AP.
 
 ## Máy trạng thái đang dùng

@@ -1,6 +1,6 @@
 # Giao thức dữ liệu
 
-UTF-8 JSON Lines, một object/dòng. Serial921600baud, firmware không thêm prefix
+UTF-8 JSON Lines, một object/dòng. Serial460800baud, firmware không thêm prefix
 log vào JSON. Boot log bị parser bỏ qua và đếm dòng lỗi, không coi như Probe.
 
 Mọi gói: v=1, type, node=sniffer, boot_id, ts_us (microseconds từ boot), seq.

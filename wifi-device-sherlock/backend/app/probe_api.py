@@ -15,7 +15,7 @@ def configure(p,r,config):
 
 class Connection(BaseModel):
     port:str=Field(min_length=1,max_length=128)
-    baud:int=Field(default=921600,ge=9600,le=3000000)
+    baud:int=Field(default=460800,ge=9600,le=3000000)
 class Experiment(BaseModel):
     device_count:int=Field(ge=0,le=200)
     people_count:int|None=Field(default=None,ge=0,le=200)
