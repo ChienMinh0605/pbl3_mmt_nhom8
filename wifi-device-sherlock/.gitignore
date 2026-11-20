@@ -6,6 +6,7 @@ __pycache__/
 firmware/*/build/
 firmware/*/sdkconfig*
 !firmware/*/sdkconfig.defaults
+!firmware/*/sdkconfig.fixed
 frontend/dist/
 data/runtime/
 data/results/

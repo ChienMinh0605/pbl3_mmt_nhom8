@@ -118,6 +118,13 @@
           "default": false,
           "title": "Retry",
           "type": "boolean"
+        },
+        "ie": {
+          "default": "",
+          "maxLength": 200,
+          "pattern": "^(\\d{1,3}:\\d{1,3}(,\\d{1,3}:\\d{1,3})*)?$",
+          "title": "Ie",
+          "type": "string"
         }
       },
       "required": [
