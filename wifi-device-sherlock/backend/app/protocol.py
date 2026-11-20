@@ -23,6 +23,8 @@ class Probe(Wire):
     channel: int = Field(ge=1,le=13,strict=True)
     frame_seq: int = Field(ge=0,le=4095,strict=True)
     retry: bool = False
+    # Danh sách 'mã:độ dài' của Information Element theo thứ tự trong khung; rỗng với firmware cũ
+    ie: str = Field(default='',max_length=200,pattern=r'^(\d{1,3}:\d{1,3}(,\d{1,3}:\d{1,3})*)?$')
 class Status(Wire):
     type: Literal['status']
     capture_active: bool

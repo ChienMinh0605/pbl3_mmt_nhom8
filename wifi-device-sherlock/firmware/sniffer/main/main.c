@@ -4,7 +4,8 @@
 #include "cJSON.h"
 #include <stdatomic.h>
 /* ESP-IDF 5.5.4, ESP32-C3, UART0 GPIO21/20 (CH340 boards). */
-typedef struct {int64_t ts;uint8_t mac[6],channel;int8_t rssi;uint16_t frame_seq;bool retry;} item_t;
+#define MAX_IE 24 /* đủ cho Probe Request điện thoại; IE thừa bị bỏ */
+typedef struct {int64_t ts;uint8_t mac[6],channel;int8_t rssi;uint16_t frame_seq;bool retry;uint8_t ie_n,ie[2*MAX_IE];} item_t;
 static QueueHandle_t queue;
 static atomic_uint seen,dropped,invalid,serial_errors,bytes_written;
 static char boot[20];static uint8_t own[6];static uint32_t seq;
@@ -37,6 +38,11 @@ static void receive(void *buf,wifi_promiscuous_pkt_type_t type) {
     item_t x={.ts=esp_timer_get_time(),.channel=p->rx_ctrl.channel,.rssi=p->rx_ctrl.rssi,
         .frame_seq=(uint16_t)((b[22]|((uint16_t)b[23]<<8))>>4),.retry=(b[1]&8)!=0};
     memcpy(x.mac,b+10,6);
+    /* Danh sách (mã IE, độ dài) theo thứ tự trong khung; sig_len gồm 4 byte FCS */
+    int pos=24,end=p->rx_ctrl.sig_len-4;
+    while(pos+2<=end && x.ie_n<MAX_IE && pos+2+b[pos+1]<=end) {
+        x.ie[2*x.ie_n]=b[pos];x.ie[2*x.ie_n+1]=b[pos+1];x.ie_n++;pos+=2+b[pos+1];
+    }
     if(xQueueSend(queue,&x,0)!=pdTRUE)atomic_fetch_add(&dropped,1);
 }
 static void output_task(void *arg) {
@@ -74,7 +80,10 @@ static void output_task(void *arg) {
             cJSON *j=base("probe",x.ts);
             if(j){mac_json(j,"source_mac",x.mac);cJSON_AddNumberToObject(j,"rssi",x.rssi);
                 cJSON_AddNumberToObject(j,"channel",x.channel);cJSON_AddNumberToObject(j,"frame_seq",x.frame_seq);
-                cJSON_AddBoolToObject(j,"retry",x.retry);}emit(j);
+                cJSON_AddBoolToObject(j,"retry",x.retry);
+                char ie[MAX_IE*8+1];int n=0;ie[0]=0;
+                for(int i=0;i<x.ie_n;i++)n+=snprintf(ie+n,sizeof(ie)-n,"%s%u:%u",i?",":"",x.ie[2*i],x.ie[2*i+1]);
+                cJSON_AddStringToObject(j,"ie",ie);}emit(j);
         }
     }
 }

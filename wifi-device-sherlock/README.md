@@ -143,6 +143,22 @@ Phiên thật nằm ở `data/runtime/experiments/<id>/`; SQLite ở `data/runti
 
 Thay `ID` bằng phiên thật. Trước khi sweep, tạo `configs/split.json` từ `configs/split.example.json`, chia buổi development/test độc lập. Không để các đoạn cùng buổi xuất hiện ở cả hai tập.
 
+### Gom MAC ngẫu nhiên theo dấu vân tay IE (thử nghiệm)
+
+Firmware gửi thêm trường `ie` (mã và độ dài từng Information Element). Script gom các MAC có cùng dãy IE, bỏ IE 0 (SSID):
+
+```bash
+.venv/bin/python -m research.ie_fingerprint data/runtime/experiments/ID/raw.jsonl --rssi-min -45
+```
+
+Thu dữ liệu cho việc này nên nghe cố định một kênh để bắt trọn từng đợt quét (xoá `firmware/sniffer/sdkconfig` trước nếu đã build bản nhảy kênh):
+
+```bash
+idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.fixed" build
+```
+
+Một nhóm có thể gồm nhiều máy cùng đời; chưa tách bằng DBSCAN. Thử với OPPO Find X6 Pro: 11 MAC trong 2,5 phút gom đúng thành 1 nhóm. Ở trường, 100+ MAC dùng chung một dãy IE phổ biến nên không tách được bằng IE.
+
 ## 8. Phát triển và kiểm tra
 
 ```bash

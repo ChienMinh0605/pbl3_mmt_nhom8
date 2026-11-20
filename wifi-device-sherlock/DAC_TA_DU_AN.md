@@ -58,6 +58,7 @@ Callback chỉ lấy management Probe Request, bỏ gói ngắn/lỗi và nguồ
 | channel | Integer 1–13 tại thời điểm nhận gói |
 | frame_seq | Integer 0–4095, sequence number của frame |
 | retry | Boolean, mặc định false nếu thiếu |
+| ie | Chuỗi `mã:độ dài` của các Information Element theo thứ tự trong khung, ví dụ `0:0,1:4,50:8,45:26`; rỗng nếu firmware cũ |
 
 ```json
 {"v":1,"type":"probe","node":"sniffer","boot_id":"boot-a","ts_us":1234567,"seq":12,"source_mac":"9a:31:87:22:fd:08","rssi":-67,"channel":6,"frame_seq":88,"retry":false}
