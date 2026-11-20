@@ -208,7 +208,7 @@
           "type": "integer"
         },
         "serial_baud": {
-          "const": 921600,
+          "const": 460800,
           "title": "Serial Baud",
           "type": "integer"
         },

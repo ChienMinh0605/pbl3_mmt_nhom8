@@ -30,7 +30,7 @@ Backend bind `127.0.0.1`; không có xác thực nhiều người dùng. Polling
 
 ## 3. Firmware và serial
 
-Firmware: `firmware/sniffer`, ESP-IDF 5.5.4, ESP32-C3. UART0 GPIO21 TX / GPIO20 RX, 921600 baud cho cấu hình board CH340 hiện có. JSON UTF-8, mỗi dòng một object kết thúc bằng newline. Boot log/dòng sai bị bỏ qua và tăng bộ đếm lỗi parser.
+Firmware: `firmware/sniffer`, ESP-IDF 5.5.4, ESP32-C3. UART0 GPIO21 TX / GPIO20 RX, 460800 baud cho cấu hình board CH340 hiện có. JSON UTF-8, mỗi dòng một object kết thúc bằng newline. Boot log/dòng sai bị bỏ qua và tăng bộ đếm lỗi parser.
 
 Mặc định country VN, hopping kênh 1–13, dwell 3000 ms/kênh. Một vòng danh nghĩa 39 giây, không tính trễ. Có cấu hình fixed channel qua menuconfig. Chọn kênh phù hợp country policy; đổi cấu hình radio cần build/flash lại.
 
@@ -75,7 +75,7 @@ Kênh trong Probe là kênh nhận thực tế. Probe nằm trong queue có th�
 | probe_seen, probe_dropped | Tổng Probe board ghi nhận / rơi do queue |
 | invalid | Bộ đếm khung lỗi/ngắn trên board |
 | serial_errors, bytes_written | Bộ đếm lỗi xuất serial / byte ghi |
-| serial_baud | 921600 |
+| serial_baud | 460800 |
 
 Các bộ đếm board là tích lũy từ boot, không phải tốc độ mỗi giây và không cùng mốc với bộ đếm thuật toán trên laptop.
 

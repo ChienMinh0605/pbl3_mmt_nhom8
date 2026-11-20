@@ -100,7 +100,7 @@ Backend đọc [configs/probe.json](configs/probe.json). Giá trị tại thời
 
 ## 5. Cắm và nạp ESP32-C3
 
-Firmware mục tiêu ESP-IDF **5.5.4**, UART0 **921600 baud**, TX GPIO21 / RX GPIO20 cho board dùng CH340. Không mặc định cấu hình này phù hợp mọi board USB native.
+Firmware mục tiêu ESP-IDF **5.5.4** (đã thử build và chạy trên **6.1**), UART0 **460800 baud**, TX GPIO21 / RX GPIO20 cho board dùng CH340. Không mặc định cấu hình này phù hợp mọi board USB native. Không dùng 921600: thử với CH340 bị mất byte ở 2,4% số dòng, 460800 thì 0%.
 
 ```bash
 source ~/esp/esp-idf/export.sh
@@ -119,7 +119,7 @@ Nếu thiếu quyền USB trên Ubuntu:
 sudo usermod -aG dialout "$USER"
 ```
 
-Đăng xuất/đăng nhập lại. Không chạy backend bằng `sudo`. Nếu cần monitor, dùng `idf.py -p /dev/ttyUSB0 -b 921600 monitor` trong thư mục firmware, thoát bằng **Ctrl + ]** trước khi dashboard kết nối.
+Đăng xuất/đăng nhập lại. Không chạy backend bằng `sudo`. Nếu cần monitor, dùng `idf.py -p /dev/ttyUSB0 -b 460800 monitor` trong thư mục firmware, thoát bằng **Ctrl + ]** trước khi dashboard kết nối.
 
 ## 6. Khi không thấy MAC
 

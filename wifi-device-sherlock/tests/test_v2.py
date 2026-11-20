@@ -14,7 +14,7 @@ def probe(mac=MAC,rssi=-40,seq=1,retry=False):
 def status(channel=6,boot='test',active=True,dropped=0):
     return dict(v=1,type='status',node='sniffer',boot_id=boot,ts_us=0,seq=0,capture_active=active,
         own_mac='02:00:00:00:00:ff',channel=channel,probe_seen=0,probe_dropped=dropped,invalid=0,
-        serial_errors=0,bytes_written=0,serial_baud=921600,sniffer_enabled=True,scan_mode='hopping',dwell_ms=3000)
+        serial_errors=0,bytes_written=0,serial_baud=460800,sniffer_enabled=True,scan_mode='hopping',dwell_ms=3000)
 
 def test_first_positive_and_first_empty_count():
     d=Sherlock(ProbeConfig(slot_s=1,arrival_slots=1,departure_slots=1));d.observe(probe(),.2)

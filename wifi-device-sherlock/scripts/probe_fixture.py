@@ -8,7 +8,7 @@ def generate(folder):
     cfg=ProbeConfig(slot_s=5,arrival_slots=2,withdrawal_slots=2,departure_slots=2)
     status=dict(v=1,type='status',node='sniffer',boot_id='synthetic',ts_us=0,seq=0,capture_active=True,
                 source_mac=None,own_mac='02:00:00:00:00:ff',channel=6,
-                probe_seen=0,probe_dropped=0,invalid=0,serial_errors=0,bytes_written=0,serial_baud=921600,
+                probe_seen=0,probe_dropped=0,invalid=0,serial_errors=0,bytes_written=0,serial_baud=460800,
                 sniffer_enabled=True,scan_mode='fixed',dwell_ms=3000)
     rows=[];seq=0
     for t in range(90):

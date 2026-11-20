@@ -79,7 +79,7 @@ def test_sniffer_virtual_uart_record_and_replay(tmp_path):
     async def run():
         master,slave=pty.openpty();port=os.ttyname(slave)
         p=ProbeService(tmp_path/'runtime',ProbeConfig(slot_s=1,arrival_slots=1))
-        await p.connect(port,921600)
+        await p.connect(port,460800)
         for _ in range(50):
             if p.connection=='connected':break
             await asyncio.sleep(.01)

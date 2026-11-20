@@ -36,9 +36,9 @@ export default function ResearchPanel(){
       {[['MAC trong cửa sổ',result?.unique_count],['RSSI + timeout',result?.timeout_count],['Sherlock xác nhận',result?.sherlock.count]].map(([name,value])=><section className="stat" key={name}><div className="stat-label">{name}</div><h2>{s?.valid?value:'—'}</h2><p>{s?.valid?'Số nguồn MAC':'Chưa có nguồn dữ liệu hợp lệ'}</p></section>)}
     </div>
     <div className="two-grid">
-      <section className="panel"><h3>Kết nối ESP32-C3 sniffer</h3><p>Một board nối USB với laptop. Baud: 921600. Không cần kết nối AP.</p>
+      <section className="panel"><h3>Kết nối ESP32-C3 sniffer</h3><p>Một board nối USB với laptop. Baud: 460800. Không cần kết nối AP.</p>
         <label>Cổng sniffer<select value={port} onChange={e=>setPort(e.target.value)}><option value="">Chọn cổng</option>{ports.map(p=><option key={p.device} value={p.device}>{p.device} · {p.description}</option>)}</select></label>
-        <div className="button-row"><button className="primary" disabled={busy||!port} onClick={()=>act(()=>request('probe/connect','POST',{port,baud:921600}))}>Kết nối</button><button className="secondary" disabled={busy} onClick={()=>act(()=>request('probe/disconnect','POST'))}>Ngắt</button><button className="secondary" onClick={()=>act(refresh)}>Làm mới cổng</button></div>
+        <div className="button-row"><button className="primary" disabled={busy||!port} onClick={()=>act(()=>request('probe/connect','POST',{port,baud:460800}))}>Kết nối</button><button className="secondary" disabled={busy} onClick={()=>act(()=>request('probe/disconnect','POST'))}>Ngắt</button><button className="secondary" onClick={()=>act(refresh)}>Làm mới cổng</button></div>
         <p>Kết nối: {s?.connection??'Chờ backend'} · Kênh: {s?.firmware?.channel??'—'} · {s?.firmware?.scan_mode??'—'}</p>
         <p>Gói hợp lệ: {s?.counters?.valid??0} · Dòng lỗi: {s?.counters?.invalid??0} · Queue drop: {s?.firmware?.probe_dropped??'—'}</p>
         {s?.error&&<div className="alert error">{s.error}</div>}

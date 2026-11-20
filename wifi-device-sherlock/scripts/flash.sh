@@ -13,4 +13,4 @@ cd "$ROOT/firmware/sniffer"
 if [[ ! -f sdkconfig ]] || ! grep -q 'CONFIG_IDF_TARGET="esp32c3"' sdkconfig; then idf.py set-target esp32c3; fi
 idf.py build
 idf.py -p "$PORT" -b 460800 flash
-echo 'Nạp xong. Mở dashboard, chọn cổng này với baud 921600. Đóng monitor trước khi kết nối.'
+echo 'Nạp xong. Mở dashboard, chọn cổng này với baud 460800. Đóng monitor trước khi kết nối.'
