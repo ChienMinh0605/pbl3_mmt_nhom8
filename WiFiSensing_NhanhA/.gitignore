@@ -1,0 +1,7 @@
+config_local.json
+data/
+data_mo_phong/
+models/*.joblib
+*.png
+.pio/
+__pycache__/
