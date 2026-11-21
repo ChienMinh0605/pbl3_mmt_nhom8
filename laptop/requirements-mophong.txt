@@ -1,0 +1,3 @@
+# Chỉ cần cho mo_phong_sionna.py (dò tia 3D, ~650 MB). Cài thêm sau requirements.txt.
+sionna-rt
+matplotlib

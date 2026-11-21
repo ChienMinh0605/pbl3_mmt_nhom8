@@ -8,6 +8,8 @@
 | `tao_dac_trung_gia.py` | Sinh file đặc trưng giả để thử `train.py` |
 | `dashboard.py` | Dashboard thời gian thực (Streamlit) |
 | `dac_trung.py` | Hàm tính đặc trưng cho một window – **bản tạm**, chờ `features.py` của Tiên |
+| `nhan.py` | Bộ nhãn dùng chung (trạng thái, phím, quy đổi) |
+| `mo_phong_sionna.py` | Mô phỏng buổi thu bằng dò tia 3D Sionna RT |
 
 # logger.py – thu dữ liệu và ghi nhãn
 
@@ -55,21 +57,24 @@ Dữ liệu giả đúng định dạng đặc tả: CSI 100 dòng/giây, Probe 
    | Phím | Nhãn |
    |---|---|
    | `E` | Phòng trống |
-   | `W` | Có người đi lại |
-   | `S` | Có người ngồi / đứng yên |
-   | `M` | Có 2–3 người |
+   | `A` hoặc `W` | Người được giám sát đi lại, sinh hoạt |
+   | `S` | Ngồi / nằm yên, thở bình thường |
+   | `F` | **Té ngã** – bấm đúng lúc ngã |
+   | `D` | Nằm bất động sau ngã – bấm ngay sau `F` |
+   | `B` | Thở bất thường (phần mở rộng) |
    | `N` | Phòng trống, có người ở phòng bên |
    | `P` | Tạm dừng (đoạn này bị bỏ khi train) |
-   | `+` hoặc `=` / `-` | Có người vào / ra |
+   | `+` hoặc `=` / `-` | Có người vào / ra (gồm cả khách) – số người trong phòng |
    | `T` | Ghi chú (gõ xong bấm Enter) |
    | `Q` | Kết thúc |
 
-   **Bấm nhãn ngay khi bắt đầu**, và bấm lại mỗi khi tình huống thay đổi.
+   **Bấm nhãn ngay khi bắt đầu**, và bấm lại mỗi khi tình huống thay đổi. Bộ nhãn định nghĩa ở `nhan.py`,
+   ý nghĩa và cách thu dữ liệu ngã an toàn xem `../KE_HOACH_NHANH_NGUOI.md`.
 
 ## Dòng trạng thái
 
 ```
-00:03:12 | Nhãn: WALK | Người: 2 | CSI  99.8/s | PRB  0.5/s | mất 0 | RX drop 0 | SNF kênh 7
+00:03:12 | Nhãn: ACTIVE | Người: 2 | CSI  99.8/s | PRB  0.5/s | mất 0 | RX drop 0 | SNF kênh 7
 ```
 
 - `CSI .../s`: phải gần 100. Thấp hơn nhiều là firmware #2 hoặc kết nối Wi-Fi có vấn đề.
@@ -159,6 +164,27 @@ File `.streamlit/config.toml` giới hạn dashboard chỉ mở trên chính lap
 1. `dac_trung.py` chưa khử nhiễu wavelet. Khi Tiên xong `features.py`, dashboard phải gọi đúng hàm đó để đặc trưng
    lúc chạy giống hệt lúc train.
 2. Phần thiết bị chưa dùng máy trạng thái Sherlock.
+
+## Mô phỏng 3D bằng Sionna RT: `mo_phong_sionna.py`
+
+Tạo một buổi thu **bằng dò tia**: người đi lại, ngồi thở, **té ngã**, nằm, thở nhanh, có khách, có người ở phòng
+bên, trong một phòng 5 × 4 × 3 m tường bê tông. Kết quả ghi vào `data/raw/` **đúng định dạng logger**, nhãn gắn tự
+động, nên `kiem_tra_buoi_thu.py`, tiền xử lý, `train.py`, dashboard dùng được ngay.
+
+Sionna RT nặng (~650 MB), cài riêng khi cần:
+
+```bash
+pip install -r requirements-mophong.txt
+python mo_phong_sionna.py --tag sim1 --hinh                     # kịch bản mặc định ~5 phút, có ảnh 2D + 3D
+python mo_phong_sionna.py --tag khach1 --khach 1 --seed 3       # thêm 1 khách đi lại
+python mo_phong_sionna.py --tag nga --plan "EMPTY:20,ACTIVE:40,FALL:1.5,DOWN:60,EMPTY:20"
+python mo_phong_sionna.py --tag demo --phat-lai                 # phát lại theo thời gian thực → mở dashboard
+```
+
+- `--plan`: chuỗi `NHÃN:giây` theo bộ nhãn ở trên (`FALL` nên dài 1–2 giây, đặt ngay trước `DOWN`).
+- `--hinh`: lưu `mo_phong_2d.png` (quỹ đạo nhìn từ trên + biên độ CSI theo thời gian) và `mo_phong_3d.png`.
+- Chạy trên CPU, khoảng 0,1 giây cho mỗi khung dò tia (10 khung/giây dữ liệu): 5 phút dữ liệu mất khoảng 3–5 phút.
+- `meta.json` có `"simulated": true` và khối `"simulator"`; `kiem_tra_buoi_thu.py` sẽ nhắc đây là dữ liệu mô phỏng.
 
 ## File `logger_config.json`
 

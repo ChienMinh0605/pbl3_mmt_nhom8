@@ -38,10 +38,11 @@ except ImportError:
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-SPEC_VERSION = "0.1"
+SPEC_VERSION = "0.2"
 FEATURE_RE = re.compile(r"^(rssi|csi)_(var|mad|range|iqr)(_\d{2})?$")
 REQUIRED = ["session_id", "win_start", "valid", "label_detail", "label"]
-DETAIL_ORDER = ["EMPTY", "NEIGHBOR", "STATIC", "WALK", "MULTI"]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from nhan import STATES as DETAIL_ORDER  # noqa: E402
 
 
 # --------------------------------------------------------------------------- dữ liệu

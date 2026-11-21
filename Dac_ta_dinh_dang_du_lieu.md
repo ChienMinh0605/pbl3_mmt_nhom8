@@ -1,6 +1,6 @@
 # Đặc tả định dạng dữ liệu – Đề tài Wi‑Fi Sensing (Nhóm 8)
 
-**Phiên bản:** v0.1 (bản nháp, cần Tiên và Phúc góp ý trước khi chốt)
+**Phiên bản:** v0.2 (đổi bộ nhãn theo bài toán giám sát an toàn: có người, té ngã, nhịp thở – xem `KE_HOACH_NHANH_NGUOI.md`)
 **Người soạn:** Chiến
 
 ---
@@ -218,23 +218,30 @@ host_time,event,value
 | `event` | `value` | Phím | Ý nghĩa |
 |---|---|---|---|
 | `STATE` | `EMPTY` | `E` | Phòng trống |
-| `STATE` | `WALK` | `W` | Có người đi lại |
-| `STATE` | `STATIC` | `S` | Có người ngồi / đứng yên |
-| `STATE` | `MULTI` | `M` | Có 2–3 người trong phòng |
-| `STATE` | `NEIGHBOR` | `N` | Phòng trống, có người đi lại ở phòng bên |
+| `STATE` | `ACTIVE` | `A` (hoặc `W`) | Người được giám sát đi lại, sinh hoạt |
+| `STATE` | `STILL` | `S` | Ngồi hoặc nằm yên, thở bình thường |
+| `STATE` | `FALL` | `F` | **Khoảnh khắc té ngã** – bấm đúng lúc ngã; là sự kiện ngắn 1–2 giây |
+| `STATE` | `DOWN` | `D` | Nằm bất động trên sàn sau khi ngã – bấm ngay sau `F` |
+| `STATE` | `BREATH_ABN` | `B` | Yên nhưng thở bất thường (nhanh/nông hoặc ngưng) – phần mở rộng |
+| `STATE` | `NEIGHBOR` | `N` | Phòng trống, có người đi lại ở phòng bên (kiểm tra báo động giả) |
 | `STATE` | `PAUSE` | `P` | Đang sắp xếp, không dùng đoạn này |
-| `COUNT` | `+1` / `-1` | `+` / `-` | Có người vào / ra (số đếm thủ công cho nhánh thiết bị) |
+| `COUNT` | `+1` / `-1` | `+` / `-` | Có người vào / ra (số người trong phòng, gồm cả khách) |
 | `NOTE` | chữ tự do | `T` | Ghi chú |
 
 Một nhãn `STATE` có hiệu lực **từ thời điểm bấm đến lần bấm `STATE` tiếp theo**.
 
-**Quy đổi sang nhãn nhị phân** cho mô hình:
+`STATE` mô tả **hoạt động của người được giám sát**. **Số người trong phòng** (khách, người chăm sóc) là thông tin
+riêng, lấy từ các sự kiện `COUNT` – không còn nhãn `MULTI`.
 
-| Nhãn chi tiết | Nhãn nhị phân |
-|---|---|
-| `WALK`, `STATIC`, `MULTI` | 1 – Occupied |
-| `EMPTY`, `NEIGHBOR` | 0 – Empty |
-| `PAUSE` | bỏ |
+**Quy đổi** (định nghĩa trong `laptop/nhan.py`, mọi script dùng chung):
+
+| Nhãn chi tiết | `label` – có người | `activity` – mức hoạt động |
+|---|---|---|
+| `EMPTY`, `NEIGHBOR` | 0 | 0 – trống |
+| `ACTIVE` | 1 | 1 – hoạt động |
+| `STILL`, `DOWN`, `BREATH_ABN` | 1 | 2 – yên |
+| `FALL` | 1 | (để trống – sự kiện, xử lý ở tầng phát hiện ngã) |
+| `PAUSE` | bỏ | bỏ |
 
 ### 4.5. `meta.json`
 
@@ -281,20 +288,23 @@ Mỗi dòng là **một window**:
 | `win_start`, `win_end` | `host_time` đầu và cuối window |
 | `n_samples` | Số mẫu CSI trong window |
 | `valid` | 1 nếu `n_samples` ≥ 70% số mẫu dự kiến |
-| `label_detail` | `EMPTY`, `WALK`, `STATIC`, `MULTI`, `NEIGHBOR` |
-| `label` | 0 hoặc 1 (theo bảng quy đổi ở mục 4.4) |
+| `label_detail` | Một nhãn `STATE` ở mục 4.4 |
+| `label` | 0 hoặc 1 – có người (bảng quy đổi mục 4.4) |
+| `activity` | 0 / 1 / 2 – trống / hoạt động / yên; để trống với `FALL` |
+| `n_people` | Số người trong phòng tại giữa window, tính từ các sự kiện `COUNT` |
 | `rssi_var`, `rssi_mad`, `rssi_range`, `rssi_iqr` | 4 đặc trưng của RSSI |
 | `csi_var_k`, `csi_mad_k`, `csi_range_k`, `csi_iqr_k` | 4 đặc trưng của sóng mang con thứ `k`. `k` là **chỉ số gốc 0–63**, viết 2 chữ số (`csi_var_07`), để tên cột không đổi khi danh sách sóng mang con giữ lại thay đổi |
 
 Quy tắc:
-- Window **cắt ngang chỗ đổi nhãn** thì bỏ, vì không biết gán nhãn nào.
+- Window **cắt ngang chỗ đổi nhãn** thì bỏ, vì không biết gán nhãn nào. Riêng `FALL` (1–2 giây) không bao giờ nằm trọn
+  trong window 6 giây: phát hiện ngã dùng window ngắn riêng, định dạng sẽ chốt ở v0.3 (xem kế hoạch nhánh người).
 - Window nằm trong đoạn `PAUSE` thì bỏ.
 - Window có `valid = 0` vẫn ghi ra file (để thống kê), mô hình sẽ lọc bỏ.
 
 `feature_meta.json` ghi lại cách tạo đặc trưng, để biết hai file có so sánh được với nhau không:
 ```json
 {
-  "spec_version": "0.1",
+  "spec_version": "0.2",
   "window_s": 6,
   "expected_rate_hz": 100,
   "valid_ratio": 0.7,
@@ -348,7 +358,7 @@ Mỗi dòng là **một khe 1 phút**:
 **Cần cả nhóm xác nhận:**
 - [ ] Đồng ý dùng dạng văn bản cho bản v0.1 (chuyển sang nhị phân nếu buổi kiểm thử cho thấy không kịp).
 - [ ] Đồng ý tên và thứ tự các trường ở mục 3.
-- [ ] Đồng ý bộ phím ghi nhãn ở mục 4.4.
+- [ ] Đồng ý bộ nhãn và phím mới ở mục 4.4 (v0.2).
 
 **Tiên:** firmware #1 in `BOOT`; firmware #2 in `BOOT`, `CSI`, `STAT` đúng mục 3; kiểm tra `len` thực tế; viết `features.py` xuất file đúng mục 5.
 
@@ -363,3 +373,4 @@ Mỗi dòng là **một khe 1 phút**:
 | Phiên bản | Ngày | Người sửa | Nội dung |
 |---|---|---|---|
 | 0.1 | 09/11/2026 | Chiến | Bản nháp đầu tiên; bổ sung các trường `simulated`, `ports`, `stats` của `meta.json` theo `laptop/logger.py` |
+| 0.2 | 21/11/2026 | Chiến | Bài toán mới (giám sát an toàn): nhãn `ACTIVE`, `STILL`, `FALL`, `DOWN`, `BREATH_ABN` thay `WALK`, `STATIC`, `MULTI`; số người lấy từ `COUNT`; file đặc trưng thêm `activity`, `n_people`; `meta.json` có thể có khối `simulator` (dữ liệu mô phỏng Sionna RT) |

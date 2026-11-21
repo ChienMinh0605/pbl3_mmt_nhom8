@@ -20,7 +20,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DEFAULT_RAW = HERE.parent / "data" / "raw"
 
-BINARY = {"WALK": 1, "STATIC": 1, "MULTI": 1, "EMPTY": 0, "NEIGHBOR": 0}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from nhan import PRESENCE as BINARY, SHORT_OK  # noqa: E402
 
 
 # --------------------------------------------------------------------------- đọc file
@@ -257,7 +258,7 @@ def check_labels(rep, labels, args, t0, t1):
 
     if first - t0 > 60:
         rep.warn(f"Bấm nhãn đầu tiên sau {fmt_dur(first - t0)}: đoạn đầu bị bỏ.")
-    short = [(v, b - a) for v, a, b in segs if v != "PAUSE" and b - a < 2 * args.window]
+    short = [(v, b - a) for v, a, b in segs if v not in SHORT_OK and b - a < 2 * args.window]
     if short:
         rep.warn(f"{len(short)} đoạn nhãn ngắn hơn {2 * args.window:g} giây (bấm nhầm?).")
     if w0 == 0 and w1 == 0:
@@ -308,7 +309,9 @@ def main():
     rep.p(f"Thư mục: {d}")
     rep.p(f"Thời lượng: {fmt_dur(t1 - t0)}   phòng: {meta.get('room') or '-'}   kênh: {meta.get('channel') or '-'}   "
           f"TX-RX: {meta.get('tx_rx_distance_m') or '-'} m   firmware: {meta.get('fw') or '-'}")
-    if meta.get("simulated"):
+    if meta.get("simulator", {}).get("engine") == "sionna-rt":
+        rep.warn("Dữ liệu MÔ PHỎNG Sionna RT: dùng để thử thuật toán, không thay cho dữ liệu thật khi đánh giá.")
+    elif meta.get("simulated"):
         rep.warn("Dữ liệu GIẢ LẬP (--simulate): không dùng để train.")
     if "stats" not in meta:
         rep.warn("meta.json không có 'stats': logger bị ngắt giữa chừng (dữ liệu đã ghi vẫn dùng được).")

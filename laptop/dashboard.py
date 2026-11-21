@@ -37,7 +37,7 @@ DEVICE_WINDOW_S = 60
 HOLD_S = 6.0                 # chống nhấp nháy: phải đoán khác liên tục bao lâu mới đổi trạng thái
 HISTORY_S = 1800
 STALE_S = 5
-OCCUPIED_LABELS = {"WALK": 1, "STATIC": 1, "MULTI": 1, "EMPTY": 0, "NEIGHBOR": 0}
+from nhan import PRESENCE as OCCUPIED_LABELS  # noqa: E402
 
 # màu theo shadcn/ui: đen – xám (zinc) làm nền, đỏ nhạt (red) làm màu nhấn cho "có người"
 INK, MUTED, BORDER, SOFT = "#18181b", "#71717a", "#e4e4e7", "#f4f4f5"
@@ -435,7 +435,7 @@ def panel():
                               alt.Tooltip("proba:Q", format=".0%", title="Xác suất")])
             truth = base.mark_line(interpolate="step-after", strokeDash=[4, 4], color=INK, strokeWidth=1).encode(y="truth:Q")
             rule = alt.Chart(pd.DataFrame({"y": [0.5]})).mark_rule(color=RED_SOFT, strokeDash=[2, 2]).encode(y="y:Q")
-            st.altair_chart(axis_cfg((area + truth + rule).properties(height=230)), use_container_width=True)
+            st.altair_chart(axis_cfg((area + truth + rule).properties(height=230)), width="stretch")
 
             rows = []
             times = [x[0] for x in hist]
@@ -453,7 +453,7 @@ def panel():
                                                 range=[RED_LIGHT, BORDER, "#fafafa"])),
                 tooltip=["dòng", "trạng thái", alt.Tooltip("từ:T", format="%H:%M:%S"), alt.Tooltip("đến:T", format="%H:%M:%S")],
             ).properties(height=64)
-            st.altair_chart(axis_cfg(band.configure_scale(bandPaddingInner=0.35)), use_container_width=True)
+            st.altair_chart(axis_cfg(band.configure_scale(bandPaddingInner=0.35)), width="stretch")
             st.markdown(
                 f'<div class="muted" style="display:flex;gap:16px;font-size:12px;margin-top:-6px">'
                 f'<span><span class="dot" style="background:{RED_LIGHT}"></span> Có người</span>'
@@ -480,7 +480,7 @@ def panel():
                 ch = alt.Chart(df).mark_line(color=RED_LIGHT, strokeWidth=1).encode(
                     x=alt.X("time:T", title=None, axis=alt.Axis(format="%H:%M:%S", tickCount=4)),
                     y=alt.Y("amp:Q", title=None, scale=alt.Scale(zero=False)))
-                st.altair_chart(axis_cfg(ch.properties(height=210)), use_container_width=True)
+                st.altair_chart(axis_cfg(ch.properties(height=210)), width="stretch")
             else:
                 st.markdown('<div class="muted" style="padding:40px 0;text-align:center">Chưa có dữ liệu CSI</div>',
                             unsafe_allow_html=True)

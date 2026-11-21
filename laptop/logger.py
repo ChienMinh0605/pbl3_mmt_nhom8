@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Thu dữ liệu từ ESP32-C3 #2 (CSI) và #3 (Probe Request), ghi nhãn bằng phím.
 
-Làm theo "Dac_ta_dinh_dang_du_lieu.md" phiên bản 0.1.
+Làm theo "Dac_ta_dinh_dang_du_lieu.md" phiên bản 0.2.
 
 Ví dụ:
     python logger.py --list-ports
@@ -9,8 +9,8 @@ Ví dụ:
     python logger.py --simulate --tag thu --duration 60     # chạy thử, không cần board
 
 Phím khi đang thu:
-    E phòng trống   W đi lại   S ngồi/đứng   M nhiều người   N người ở phòng bên
-    P tạm dừng (bỏ đoạn này)   + / = có người vào   - có người ra
+    E phòng trống   A (hoặc W) hoạt động/đi lại   S ngồi/nằm yên   F té ngã   D nằm bất động sau ngã
+    B thở bất thường   N người ở phòng bên   P tạm dừng (bỏ đoạn này)   + / = có người vào   - có người ra
     T ghi chú   Q kết thúc
 """
 import argparse
@@ -30,7 +30,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-SPEC_VERSION = "0.1"
+SPEC_VERSION = "0.2"
 HERE = Path(__file__).resolve().parent
 DEFAULT_DATA_DIR = HERE.parent / "data"
 CONFIG_PATH = HERE / "logger_config.json"
@@ -61,12 +61,7 @@ FILES = {
     "labels": ["host_time", "event", "value"],
 }
 
-# Phím ghi nhãn (mục 4.4 của đặc tả)
-KEYMAP = {
-    "e": ("STATE", "EMPTY"), "w": ("STATE", "WALK"), "s": ("STATE", "STATIC"),
-    "m": ("STATE", "MULTI"), "n": ("STATE", "NEIGHBOR"), "p": ("STATE", "PAUSE"),
-    "+": ("COUNT", "+1"), "=": ("COUNT", "+1"), "-": ("COUNT", "-1"),
-}
+from nhan import KEYMAP, PRESENCE  # noqa: E402  (phím ghi nhãn, mục 4.4 của đặc tả)
 
 MAC_RE = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 HEX_RE = re.compile(r"^[0-9a-fA-F]*$")
@@ -328,7 +323,7 @@ class SimSource(threading.Thread):
                 seq += 1
                 if random.random() < 0.002:           # thỉnh thoảng mất một dòng để thử bộ đếm
                     seq += 1
-                moving = self.get_label() in ("WALK", "MULTI", "STATIC")
+                moving = PRESENCE.get(self.get_label()) == 1
                 amp_noise = 6 if moving else 1.5
                 b = bytearray()
                 for k in range(64):
@@ -494,7 +489,7 @@ def main():
         sources.append(SerialSource("SNF", args.snf_port, args.baud, log.on_line, stop))
 
     print(f"Buổi thu: {session_id}\nThư mục: {log.dir}")
-    print("Phím: E trống | W đi lại | S ngồi/đứng | M nhiều người | N phòng bên | P tạm dừng | "
+    print("Phím: E trống | A/W hoạt động | S yên | F ngã | D nằm sau ngã | B thở bất thường | N phòng bên | P tạm dừng | "
           "+/- người vào/ra | T ghi chú | Q kết thúc")
     for s in sources:
         s.start()
