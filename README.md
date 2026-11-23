@@ -20,8 +20,7 @@
 | `DE_XUAT_NHANH_THIET_BI.md` | Đề xuất nhánh thiết bị và cách ghép với nhánh người – **chưa chốt** | Chiến, Phúc |
 | `firmware/` | Firmware TX, RX, sniffer | Tiên, Phúc |
 | `laptop/` | Logger, kiểm tra buổi thu, train, dashboard, mô phỏng (xem `laptop/README.md`) | Chiến |
-| `tai_lieu/` | Bài báo tham khảo (PDF) – **không đưa lên Git** | |
-| `luu_tru/` | Tài liệu theo hướng cũ (ý tưởng Empty/Occupied, báo cáo tiến độ) – chỉ để tra lại | |
+| `tai_lieu/`, `luu_tru/` | Bài báo tham khảo, tài liệu theo hướng cũ – chỉ để trên máy, **không đưa lên Git** | |
 | `data/`, `models/`, `results/` | Dữ liệu thu, dữ liệu công khai (`data/public/`), mô hình, kết quả train – **không đưa lên Git** | |
 
 `laptop/logger_config.json` chứa `salt` băm MAC: cả nhóm dùng chung, gửi riêng cho nhau, không commit.

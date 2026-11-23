@@ -349,8 +349,6 @@ def main():
           f"TX-RX: {meta.get('tx_rx_distance_m') or '-'} m   firmware: {meta.get('fw') or '-'}")
     if meta.get("simulator", {}).get("engine") == "3d":
         rep.warn("Dữ liệu MÔ PHỎNG 3D (mo_phong.py): dùng để thử thuật toán, không thay cho dữ liệu thật khi đánh giá.")
-    elif meta.get("simulator", {}).get("engine") == "sionna-rt":
-        rep.warn("Dữ liệu MÔ PHỎNG Sionna RT: dùng để thử thuật toán, không thay cho dữ liệu thật khi đánh giá.")
     elif meta.get("simulated"):
         rep.warn("Dữ liệu GIẢ LẬP (--simulate): không dùng để train.")
     if "stats" not in meta:

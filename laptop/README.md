@@ -8,13 +8,11 @@
 | `train.py` | Train và đánh giá: có người, mức hoạt động, số người, động tác; so 1 RX với 2 RX |
 | `dashboard.py` | Dashboard thời gian thực (Streamlit), đọc nhiều RX |
 | `nhan.py` | Bộ nhãn dùng chung (trạng thái, động tác, phím, quy đổi) |
-| `tao_dac_trung_gia.py` | Cách cũ: sinh đặc trưng giả không tiền tố RX (giờ nên dùng `mo_phong.py` + `features.py`) |
 | `mo_phong_ui.py`, `mo_phong_ui.html` | **Giao diện mô phỏng 3D** trên trình duyệt: chọn kịch bản, chạy, xem, lưu |
 | `mo_phong.py` | **Mô phỏng 3D theo hướng mới** (1 TX + 2 RX ở góc phòng, đặc tả v0.3) |
 | `test_mo_phong.py` | Tự kiểm tra mô phỏng (cả giao diện) |
 | `nhip_tho.py` | **Thuật toán nhịp thở** (tầng 2b): PCA trên 2 RX, có độ tin cậy, kiểm tra cử động |
 | `doi_chieu_wifall.py` | Đối chiếu mô phỏng với CSI thật của WiFall (ESP32-S3) |
-| `mo_phong_sionna.py` | Mô phỏng buổi thu bằng dò tia 3D Sionna RT | – phòng cũ, 1 RX, đặc tả v0.2; không phát triển thêm |
 
 # logger.py – thu dữ liệu và ghi nhãn
 
@@ -278,27 +276,6 @@ nhưng nín thở bị nhầm là có thở cũng tăng (vì 2 cửa sổ 30 s c
 Lưu ý khi dùng: "không thấy nhịp thở" ở **một** cửa sổ chưa đủ để báo ngưng thở (thường do tín hiệu yếu). Cảnh báo ngưng
 thở nên cần: người đang yên, trước đó đo được nhịp ổn định, rồi nhiều cửa sổ liên tiếp không thấy. Ngưỡng `MIN_PROM`
 đổi được: thấp hơn thì trả lời nhiều hơn nhưng sai nhiều hơn (bảng ở cuối lệnh tự đánh giá).
-
-## Mô phỏng 3D bằng Sionna RT: `mo_phong_sionna.py`
-
-Tạo một buổi thu **bằng dò tia**: người đi lại, ngồi thở, **té ngã**, nằm, thở nhanh, có khách, có người ở phòng
-bên, trong một phòng 5 × 4 × 3 m tường bê tông. Kết quả ghi vào `data/raw/` **đúng định dạng logger**, nhãn gắn tự
-động, nên `kiem_tra_buoi_thu.py`, tiền xử lý, `train.py`, dashboard dùng được ngay.
-
-Sionna RT nặng (~650 MB), cài riêng khi cần:
-
-```bash
-pip install -r requirements-mophong.txt
-python mo_phong_sionna.py --tag sim1 --hinh                     # kịch bản mặc định ~5 phút, có ảnh 2D + 3D
-python mo_phong_sionna.py --tag khach1 --khach 1 --seed 3       # thêm 1 khách đi lại
-python mo_phong_sionna.py --tag nga --plan "EMPTY:20,ACTIVE:40,FALL:1.5,DOWN:60,EMPTY:20"
-python mo_phong_sionna.py --tag demo --phat-lai                 # phát lại theo thời gian thực → mở dashboard
-```
-
-- `--plan`: chuỗi `NHÃN:giây` theo bộ nhãn ở trên (`FALL` nên dài 1–2 giây, đặt ngay trước `DOWN`).
-- `--hinh`: lưu `mo_phong_2d.png` (quỹ đạo nhìn từ trên + biên độ CSI theo thời gian) và `mo_phong_3d.png`.
-- Chạy trên CPU, khoảng 0,1 giây cho mỗi khung dò tia (10 khung/giây dữ liệu): 5 phút dữ liệu mất khoảng 3–5 phút.
-- `meta.json` có `"simulated": true` và khối `"simulator"`; `kiem_tra_buoi_thu.py` sẽ nhắc đây là dữ liệu mô phỏng.
 
 ## File `logger_config.json`
 

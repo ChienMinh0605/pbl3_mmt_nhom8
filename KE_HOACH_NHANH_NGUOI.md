@@ -131,7 +131,6 @@ ghép sai cặp số phức (`x[2i]` với `x[2i-1]`), **không dùng lại**.
   nhịp thở, khách vào / ra. Dùng để viết trước toàn bộ phần xử lý khi chưa có board. Không đưa vào kết quả.
   Tham số phần cứng (nhiễu, AGC, mức biên độ) đã hiệu chỉnh theo WiFall (`laptop/doi_chieu_wifall.py`); khi có dữ liệu
   thật của nhóm thì hiệu chỉnh lại.
-- `laptop/mo_phong_sionna.py` (dò tia 3D, phòng cũ, 1 RX, v0.2): **không phát triển thêm**.
 
 ## 6. Đánh giá
 
@@ -151,7 +150,7 @@ ghép sai cặp số phức (`x[2i]` với `x[2i-1]`), **không dùng lại**.
 | **Chính** | Có người; đếm 1/2/3; chế độ 1 người: đi lại / yên, **ngã có xác nhận**, **nhịp thở khi yên** |
 | **Chính, mức nhẹ** | Ngồi xuống, đứng dậy, nằm xuống, cúi nhặt (đằng nào cũng phải thu làm dữ liệu dễ nhầm với ngã); tư thế suy ra từ động tác cuối |
 | **Nếu kịp** | Cảnh báo bất động quá lâu (ví dụ ban ngày ngồi yên > 2 giờ) |
-| **Cắt** | Phân khu / vị trí; động tác, ngã, nhịp thở khi ≥ 2 người; phát triển thêm Sionna; ghép Sherlock (tạm gác) |
+| **Cắt** | Phân khu / vị trí; động tác, ngã, nhịp thở khi ≥ 2 người; ghép Sherlock (tạm gác) |
 
 ## 8. Lộ trình và phân công
 
