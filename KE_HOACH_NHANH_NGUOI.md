@@ -16,8 +16,8 @@ Nền tảng là **phát hiện có người**. Khi có người, hệ thống *
 
 | Chế độ | Hệ thống làm gì | Vì sao |
 |---|---|---|
-| **1 người** (tình huống chính) | Nhận dạng động tác: đi lại, ngồi xuống, đứng dậy, nằm xuống, cúi nhặt đồ, **té ngã**. Khi người yên: **đo nhịp thở**, cảnh báo thở quá nhanh / quá chậm / ngưng | Nguy hiểm nhất vì không ai ở bên |
-| **2–3 người** | Chỉ **đếm số người**. Tắt nhận dạng động tác, phát hiện ngã và nhịp thở | Đã có người khác để giúp; tín hiệu nhiều người trộn lẫn, không tách được |
+| **1 người** (tình huống chính) | Nhận dạng động tác: đi lại, ngồi xuống, đứng dậy, nằm xuống, cúi nhặt đồ, **té ngã**. Khi người yên: **đo nhịp thở**, cảnh báo thở quá nhanh / quá chậm / ngưng; cảnh báo **bất động quá lâu** | Nguy hiểm nhất vì không ai ở bên |
+| **2–3 người** | Chỉ **đếm số người**. Tắt nhận dạng động tác, phát hiện ngã và nhịp thở | Tín hiệu nhiều người trộn lẫn, không tách được. Phân vân giữa 1 và 2 người thì chọn 1, để không tắt nhầm phát hiện ngã |
 
 **Không làm:** nhận dạng ai, xác định vị trí trong phòng, nhận dạng động tác khi có nhiều người, chẩn đoán bệnh
 (chỉ cảnh báo dấu hiệu bất thường).
@@ -32,7 +32,7 @@ Nhóm có 4 ESP32‑C3 và 2 ESP32‑S3.
 |---|---|---|
 | TX | 1 C3 | Đặt ở góc phòng, phát **ESP‑NOW broadcast** khoảng 100 gói/s |
 | RX1, RX2 | 2 S3 | Đặt ở hai cạnh khu demo, tạo **2 đường truyền cắt qua chỗ người hoạt động**. Cùng thu CSI của cùng một gói |
-| SNF | 1 C3 | Nhánh thiết bị – **tạm gác ghép** vào nhánh người |
+| SNF | 1 C3 | Nhánh thiết bị: nghe tiêu đề khung Wi‑Fi trên mạng nhà (`DE_XUAT_NHANH_THIET_BI.md`, chờ chốt) |
 | Dự phòng | 2 C3 | Thay khi board hỏng; một con có thể làm RX3 nếu đếm người kém |
 
 - **Vì sao ESP‑NOW broadcast** thay cho SoftAP + ping: firmware đơn giản hơn (sửa từ ví dụ `csi_send`/`csi_recv`
@@ -58,7 +58,9 @@ CSI RX1, RX2 (~100 mẫu/s)
    ├─ 1 người ─► Tầng 2a: window 3 s, trượt 0,5 s → động tác:
    │             đi lại / ngồi xuống / đứng dậy / nằm xuống / cúi nhặt / NGÃ / không có động tác
    │             Tư thế hiện tại suy ra từ động tác cuối (ngồi xuống → đang ngồi ...)
-   │             CẢNH BÁO NGÃ = động tác "ngã" + tầng 0 báo "Yên" liên tục ≥ 10 s sau đó (đứng dậy thì huỷ)
+   │             CẢNH BÁO NGÃ = động tác "ngã" + 10 s sau đó không đứng dậy / đi lại
+   │             (cử động tại chỗ như giãy, cố bò dậy KHÔNG huỷ cảnh báo)
+   │             CẢNH BÁO BẤT ĐỘNG LÂU = "Yên" liên tục quá ngưỡng (demo: 5 phút)
    │
    │            Tầng 2b: khi Yên → window 30 s, lọc 0,1–0,6 Hz, FFT, chọn đường truyền có dải thở mạnh nhất
    │             → nhịp thở/phút; > 25, < 8 hoặc ngưng > 15 s → CẢNH BÁO
@@ -68,12 +70,15 @@ CSI RX1, RX2 (~100 mẫu/s)
 ```
 
 - **Ngã khác nằm xuống ở động tác, không ở vị trí:** ngã nhanh, năng lượng lớn, ngắn 1–2 s; nằm xuống chậm và đều
-  hơn. Bước xác nhận "yên ≥ 10 s" loại các trường hợp ngồi phịch xuống rồi đứng dậy ngay.
+  hơn. Bước xác nhận 10 s loại các trường hợp ngồi phịch xuống rồi đứng dậy ngay.
 - **Nhịp thở** là xử lý tín hiệu, không cần học máy: `laptop/nhip_tho.py` (PCA trên 2 RX, có độ tin cậy, kiểm tra cử
   động). Trên mô phỏng: đúng ±2 nhịp/phút ~70 % khi trả lời; chỉ hiện nhịp khi đủ tin cậy. Cảnh báo ngưng thở cần nhiều
   cửa sổ liên tiếp "không thấy nhịp thở" khi người đang yên và trước đó đo được nhịp – một cửa sổ chưa đủ.
 - Dự phòng cho demo: công tắc **"Chế độ có khách"** bấm tay trên dashboard, ghi đè kết quả đếm người.
-- Các ngưỡng (10 s, 25/8 nhịp/phút, 15 s) là **giá trị khởi đầu**, sẽ chỉnh theo dữ liệu.
+- Các ngưỡng (10 s, 25/8 nhịp/phút, 15 s, 5 phút) là **giá trị khởi đầu**, sẽ chỉnh theo dữ liệu.
+- **Nhánh thiết bị** (đề xuất, chờ chốt) bổ trợ ở ba chỗ: đánh dấu đoạn CSI nhiễu khi kênh bị thiết bị khác chiếm,
+  hoãn có giới hạn cảnh báo bất động lâu khi điện thoại trong nhà đang được dùng, chọn người nhận cảnh báo. Không bao
+  giờ huỷ cảnh báo ngã. Chi tiết: `DE_XUAT_NHANH_THIET_BI.md`.
 
 ## 4. Nhãn (đặc tả mục 4.4, định nghĩa trong `laptop/nhan.py`)
 
@@ -146,10 +151,9 @@ ghép sai cặp số phức (`x[2i]` với `x[2i-1]`), **không dùng lại**.
 
 | Mức | Nội dung |
 |---|---|
-| **Chính** | Có người; đếm 1/2/3; chế độ 1 người: đi lại / yên, **ngã có xác nhận**, **nhịp thở khi yên** |
+| **Chính** | Có người; đếm 1/2/3; chế độ 1 người: đi lại / yên, **ngã có xác nhận**, **nhịp thở khi yên**, **bất động quá lâu** |
 | **Chính, mức nhẹ** | Ngồi xuống, đứng dậy, nằm xuống, cúi nhặt (đằng nào cũng phải thu làm dữ liệu dễ nhầm với ngã); tư thế suy ra từ động tác cuối |
-| **Nếu kịp** | Cảnh báo bất động quá lâu (ví dụ ban ngày ngồi yên > 2 giờ) |
-| **Cắt** | Phân khu / vị trí; động tác, ngã, nhịp thở khi ≥ 2 người; ghép Sherlock (tạm gác) |
+| **Cắt** | Phân khu / vị trí; động tác, ngã, nhịp thở khi ≥ 2 người |
 
 ## 8. Lộ trình
 
@@ -176,7 +180,7 @@ mô phỏng → đặc trưng → train → dashboard chạy thông. Trên mô p
 | Firmware trễ | Dựa sát ví dụ esp‑csi; phần laptop làm trước trên dữ liệu giả và WiFall |
 | Nhiều RX trục trặc (USB, mất dòng, `rx_seq` không như mong đợi) | Làm theo bậc, quay về 1 RX; hub USB có nguồn, cáp tốt |
 | Thu dữ liệu ngã gây chấn thương | Chỉ ngã có kiểm soát trên nệm dày |
-| Nhầm ngã với ngồi phịch, nằm xuống nhanh, cúi nhặt | Thu riêng các động tác này; bước xác nhận "yên ≥ 10 s" |
+| Nhầm ngã với ngồi phịch, nằm xuống nhanh, cúi nhặt | Thu riêng các động tác này; bước xác nhận 10 s (không đứng dậy / đi lại) |
 | Đếm sai khi mọi người ngồi yên | Giữ số khi phòng yên; công tắc "Chế độ có khách"; báo cáo riêng hai trường hợp |
 | Nhịp thở quá yếu | Người ngồi/nằm trong khu demo gần đường truyền; chọn RX có dải thở mạnh nhất |
 | Mô hình kém khi đổi chỗ | Thu và demo tại cùng một khu; chia train/test theo buổi |
