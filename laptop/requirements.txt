@@ -6,3 +6,4 @@ joblib
 # XGBoost: bản chỉ dùng CPU, nhẹ hơn nhiều so với gói "xgboost" đầy đủ
 xgboost-cpu
 streamlit
+matplotlib
