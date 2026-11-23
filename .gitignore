@@ -9,7 +9,7 @@ __pycache__/
 # bài báo tham khảo (bản quyền) và tài liệu Word nội bộ
 *.pdf
 *.docx
-!WiFi_Sensing_Tom_tat.docx
+!luu_tru/WiFi_Sensing_Tom_tat.docx
 ~$*
 .~lock*
 

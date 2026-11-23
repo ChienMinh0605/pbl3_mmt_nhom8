@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Thu dữ liệu từ ESP32-C3 #2 (CSI) và #3 (Probe Request), ghi nhãn bằng phím.
 
-Làm theo "Dac_ta_dinh_dang_du_lieu.md" phiên bản 0.2.
+Làm theo "Dac_ta_dinh_dang_du_lieu.md" phiên bản 0.3 (1 TX phát ESP-NOW, nhiều RX, nhãn động tác).
 
 Ví dụ:
     python logger.py --list-ports
-    python logger.py --rx-port /dev/ttyACM0 --snf-port /dev/ttyACM1 --tag phongA
-    python logger.py --simulate --tag thu --duration 60     # chạy thử, không cần board
+    python logger.py --rx-port /dev/ttyACM0 --rx-port /dev/ttyACM1 --snf-port /dev/ttyACM2 --tag phongA
+    python logger.py --simulate --tag thu --duration 60     # chạy thử, không cần board (giả 2 RX + sniffer)
 
 Phím khi đang thu:
-    E phòng trống   A (hoặc W) hoạt động/đi lại   S ngồi/nằm yên   F té ngã   D nằm bất động sau ngã
-    B thở bất thường   N người ở phòng bên   P tạm dừng (bỏ đoạn này)   + / = có người vào   - có người ra
-    T ghi chú   Q kết thúc
+    Trạng thái: E phòng trống   A (hoặc W) đi lại   S ngồi/nằm yên   D nằm bất động sau ngã   B thở bất thường
+                N người ở phòng bên   P tạm dừng (bỏ đoạn này)
+    Động tác (bấm lúc bắt đầu): F ngã   G ngồi xuống   U đứng dậy   L nằm xuống   C cúi nhặt
+    + / = có người vào   - có người ra   R nhịp thở đáp án (gõ số rồi Enter)   T ghi chú   Q kết thúc
 """
 import argparse
 import csv
@@ -30,7 +31,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-SPEC_VERSION = "0.2"
+SPEC_VERSION = "0.3"
 HERE = Path(__file__).resolve().parent
 DEFAULT_DATA_DIR = HERE.parent / "data"
 CONFIG_PATH = HERE / "logger_config.json"
@@ -38,24 +39,24 @@ CONFIG_PATH = HERE / "logger_config.json"
 # Các trường của từng loại dòng ESP32 gửi lên (mục 3 của đặc tả)
 FIELDS = {
     "BOOT": ["board", "fw", "mac_sta", "mac_ap", "channel"],
-    "CSI": ["seq", "t_us", "src_mac", "rssi", "noise_floor", "channel", "sig_mode", "cwb",
+    "CSI": ["seq", "t_us", "rx_seq", "src_mac", "rssi", "noise_floor", "channel", "sig_mode", "cwb",
             "first_word_invalid", "len", "csi_hex"],
     "PRB": ["seq", "t_us", "src_mac", "rssi", "channel"],
     "STAT": ["t_us", "board", "n_rx", "n_filtered", "n_queue_drop", "channel"],
 }
 INT_FIELDS = {
     "BOOT": {"channel"},
-    "CSI": {"seq", "t_us", "rssi", "noise_floor", "channel", "sig_mode", "cwb", "first_word_invalid", "len"},
+    "CSI": {"seq", "t_us", "rx_seq", "rssi", "noise_floor", "channel", "sig_mode", "cwb", "first_word_invalid", "len"},
     "PRB": {"seq", "t_us", "rssi", "channel"},
     "STAT": {"t_us", "n_rx", "n_filtered", "n_queue_drop", "channel"},
 }
 MAC_FIELDS = {"BOOT": {"mac_sta", "mac_ap"}, "CSI": {"src_mac"}, "PRB": {"src_mac"}}
-BOARDS = {"TX", "RX", "SNF"}
+BOARDS = {"TX", "RX1", "RX2", "RX3", "SNF"}
 
 # Cột của các file trong data/raw/<session_id>/ (mục 4 của đặc tả)
 FILES = {
     "boot": ["host_time"] + FIELDS["BOOT"],
-    "csi": ["host_time"] + FIELDS["CSI"],
+    "csi": ["host_time", "board"] + FIELDS["CSI"],             # v0.3: mọi RX ghi chung, cột board
     "probe": ["host_time", "seq", "t_us", "mac_hash", "local_admin", "rssi", "channel", "excluded"],
     "stat": ["host_time"] + FIELDS["STAT"],
     "labels": ["host_time", "event", "value"],
@@ -147,6 +148,7 @@ class SessionLogger:
         self.bad_lines = 0
         self.other_lines = 0
         self.fw = {}
+        self.board_of = {}          # nguồn (cổng) -> tên board lấy từ dòng BOOT
         self.last_stat = {}         # board -> bản ghi STAT gần nhất
         self.label = None
         self.people = 0
@@ -183,6 +185,7 @@ class SessionLogger:
                 self.last_seq[key] = rec["seq"]   # seq nhỏ hơn = board vừa khởi động lại
             if kind == "BOOT":
                 self.fw[rec["board"]] = rec["fw"]
+                self.board_of[source] = rec["board"]
                 for m in (rec["mac_sta"], rec["mac_ap"]):
                     if m != "-":
                         self.exclude.add(m)
@@ -193,6 +196,8 @@ class SessionLogger:
                 rec = {"seq": rec["seq"], "t_us": rec["t_us"], "mac_hash": mac_hash(self.salt, mac),
                        "local_admin": int(is_local_admin(mac)), "rssi": rec["rssi"], "channel": rec["channel"],
                        "excluded": int(mac in self.exclude)}
+            if kind == "CSI":                       # chưa nhận BOOT thì tạm lấy tên nguồn (RX1, RX2 theo thứ tự cổng)
+                rec["board"] = self.board_of.get(source, source.replace("SIM-", ""))
         name = {"BOOT": "boot", "CSI": "csi", "PRB": "probe", "STAT": "stat"}[kind]
         self.q.put((name, [host_time] + [rec[c] for c in FILES[name][1:]]))
 
@@ -290,7 +295,7 @@ class SerialSource(threading.Thread):
 class SimSource(threading.Thread):
     """Sinh dữ liệu giả đúng định dạng đặc tả, để chạy thử khi chưa có firmware."""
 
-    AP_MAC = "64:e8:33:0a:0b:0d"
+    TX_MAC = "1a:00:00:00:00:00"
     PHONES = ["9a:31:87:22:fd:08", "2a:15:c1:57:16:d8", "3c:28:6d:11:22:33", "da:a1:19:44:55:66"]
 
     def __init__(self, board, on_line, stop, get_label):
@@ -309,34 +314,41 @@ class SimSource(threading.Thread):
         (self._run_rx if self.board == "RX" else self._run_snf)()
 
     def _run_rx(self):
-        rate, seq, n_sec, next_t, next_stat, next_boot = 100, 0, 0, time.time(), time.time() + 1, 0
-        phase = [random.uniform(0, 6.28) for _ in range(64)]
+        """Giả 2 RX nhận cùng gói ESP-NOW của TX: cùng rx_seq, seq riêng từng board, 52 sóng mang con (len 104).
+        Muốn dữ liệu giống thật hơn (người, té ngã, nhịp thở) thì dùng mo_phong.py / mo_phong_ui.py."""
+        boards = ("RX1", "RX2")
+        rate, rx_seq, next_t, next_stat, next_boot = 100, random.randrange(4096), time.time(), time.time() + 1, 0
+        seq, n_sec = dict.fromkeys(boards, 0), dict.fromkeys(boards, 0)
+        phase = {b: [random.uniform(0, 6.28) for _ in range(52)] for b in boards}
         while not self.stop.is_set():
             now = time.time()
             if now >= next_boot:
-                self.emit(f"BOOT,RX,0.1-sim,64:e8:33:01:02:03,{self.AP_MAC},6")
+                for i, b in enumerate(boards):
+                    self.on_line(f"BOOT,{b},0.3-sim,64:e8:33:01:02:0{i + 3},{self.TX_MAC},6", "SIM-" + b)
                 next_boot = now + 30
             if now >= next_stat:
-                self.emit(f"STAT,{self.t_us()},RX,{n_sec},{random.randint(0, 3)},0,6")
-                n_sec, next_stat = 0, next_stat + 1
+                for b in boards:
+                    self.on_line(f"STAT,{self.t_us()},{b},{n_sec[b]},{random.randint(0, 3)},0,6", "SIM-" + b)
+                    n_sec[b] = 0
+                next_stat += 1
             if now >= next_t:
-                seq += 1
-                if random.random() < 0.002:           # thỉnh thoảng mất một dòng để thử bộ đếm
-                    seq += 1
+                rx_seq = (rx_seq + 1) % 4096
                 moving = PRESENCE.get(self.get_label()) == 1
-                amp_noise = 6 if moving else 1.5
-                b = bytearray()
-                for k in range(64):
-                    if k in (0, 1) or 27 <= k <= 37:      # sóng mang con rỗng
-                        b += bytes(2)
+                for b in boards:
+                    if random.random() < 0.005:       # mất trên không: board này không nhận gói
                         continue
-                    a = 20 + 8 * math.sin(k / 7) + random.gauss(0, amp_noise)
-                    ph = phase[k] + random.gauss(0, 0.3 if moving else 0.05)
-                    im, re_ = int(a * math.sin(ph)), int(a * math.cos(ph))
-                    b += bytes([im & 0xFF, re_ & 0xFF])
-                rssi = int(-42 + random.gauss(0, 3 if moving else 0.7))
-                self.emit(f"CSI,{seq},{self.t_us()},{self.AP_MAC},{rssi},-95,6,1,0,1,{len(b)},{b.hex()}")
-                n_sec += 1
+                    seq[b] += 1
+                    if random.random() < 0.002:       # mất trên USB: seq nhảy
+                        seq[b] += 1
+                    raw = bytearray()
+                    for k in range(52):
+                        a = 15 + 5 * math.sin(k / 7) + random.gauss(0, 4 if moving else 1)
+                        ph = phase[b][k] + random.gauss(0, 0.3 if moving else 0.05)
+                        raw += bytes([int(a * math.sin(ph)) & 0xFF, int(a * math.cos(ph)) & 0xFF])
+                    rssi = int(-42 + random.gauss(0, 3 if moving else 0.7))
+                    self.on_line(f"CSI,{seq[b]},{self.t_us()},{rx_seq},{self.TX_MAC},{rssi},-95,6,0,0,0,104,"
+                                 f"{raw.hex()}", "SIM-" + b)
+                    n_sec[b] += 1
                 next_t += 1 / rate
             self.stop.wait(max(0.0, min(next_t, next_stat) - time.time()))
 
@@ -345,7 +357,7 @@ class SimSource(threading.Thread):
         while not self.stop.is_set():
             now = time.time()
             if now >= next_boot:
-                self.emit("BOOT,SNF,0.1-sim,64:e8:33:05:06:07,-,1")
+                self.emit("BOOT,SNF,0.3-sim,64:e8:33:05:06:07,-,1")
                 next_boot = now + 30
             if now >= next_hop:
                 ch, next_hop = ch % 13 + 1, now + 3
@@ -428,14 +440,14 @@ def list_ports():
 def status_line(s, elapsed, prev_counts, dt):
     c = s["counts"]
     rate = lambda k: (c[k] - prev_counts.get(k, 0)) / dt if dt > 0 else 0.0
-    rx, snf = s["stat"].get("RX"), s["stat"].get("SNF")
+    rxs, snf = [s["stat"][b] for b in sorted(s["stat"]) if b.startswith("RX")], s["stat"].get("SNF")
     hh, rem = divmod(int(elapsed), 3600)
     mm, ss = divmod(rem, 60)
     label = s["label"] or "CHƯA CÓ NHÃN"
     parts = [f"{hh:02d}:{mm:02d}:{ss:02d}", f"Nhãn: {label}", f"Người: {s['people']}",
              f"CSI {rate('CSI'):5.1f}/s", f"PRB {rate('PRB'):4.1f}/s", f"mất {s['lost']}"]
-    if rx:
-        parts.append(f"RX drop {rx['n_queue_drop']}")
+    if rxs:
+        parts.append("RX " + "/".join(f"{r['n_rx']}" for r in rxs) + "/s, drop " + "/".join(str(r["n_queue_drop"]) for r in rxs))
     if snf:
         parts.append(f"SNF kênh {snf['channel']}")
     if s["bad"]:
@@ -444,16 +456,17 @@ def status_line(s, elapsed, prev_counts, dt):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Thu dữ liệu CSI + Probe Request và ghi nhãn (đặc tả v0.1).")
+    ap = argparse.ArgumentParser(description="Thu dữ liệu CSI + Probe Request và ghi nhãn (đặc tả v0.3).")
     ap.add_argument("--list-ports", action="store_true", help="liệt kê cổng USB rồi thoát")
-    ap.add_argument("--rx-port", help="cổng của ESP32-C3 #2 (vd. /dev/ttyACM0, COM5)")
-    ap.add_argument("--snf-port", help="cổng của ESP32-C3 #3")
+    ap.add_argument("--rx-port", action="append", default=[],
+                    help="cổng của một RX (vd. /dev/ttyACM0, COM5); lặp lại cho RX1, RX2, ...")
+    ap.add_argument("--snf-port", help="cổng của sniffer")
     ap.add_argument("--baud", type=int, default=921600, help="USB Serial/JTAG bỏ qua giá trị này")
     ap.add_argument("--simulate", action="store_true", help="dùng dữ liệu giả thay cho board thật")
     ap.add_argument("--tag", help="tên ngắn của buổi thu, vd. phongA")
     ap.add_argument("--room", default="", help="mô tả phòng")
     ap.add_argument("--distance", type=float, default=None, help="khoảng cách TX-RX (m)")
-    ap.add_argument("--channel", type=int, default=None, help="kênh của #1 và #2")
+    ap.add_argument("--channel", type=int, default=None, help="kênh TX phát ESP-NOW")
     ap.add_argument("--members", default="", help="người có mặt, cách nhau bằng dấu phẩy")
     ap.add_argument("--notes", default="")
     ap.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR))
@@ -473,7 +486,8 @@ def main():
     session_id = datetime.now().strftime("%Y%m%d_%H%M") + "_" + args.tag
     meta = {"session_id": session_id, "room": args.room, "tx_rx_distance_m": args.distance,
             "channel": args.channel, "members": [m.strip() for m in args.members.split(",") if m.strip()],
-            "simulated": args.simulate, "ports": {"RX": args.rx_port, "SNF": args.snf_port},
+            "simulated": args.simulate,
+            "ports": {**{f"RX{i + 1}": p for i, p in enumerate(args.rx_port)}, "SNF": args.snf_port},
             "notes": args.notes}
     log = SessionLogger(Path(args.data_dir) / "raw" / session_id, cfg["salt"], cfg["exclude_macs"], meta,
                         args.verbose)
@@ -483,14 +497,15 @@ def main():
     if args.simulate:
         sources += [SimSource("RX", log.on_line, stop, lambda: log.label),
                     SimSource("SNF", log.on_line, stop, lambda: log.label)]
-    if args.rx_port:
-        sources.append(SerialSource("RX", args.rx_port, args.baud, log.on_line, stop))
+    for i, port in enumerate(args.rx_port):
+        sources.append(SerialSource(f"RX{i + 1}", port, args.baud, log.on_line, stop))
     if args.snf_port:
         sources.append(SerialSource("SNF", args.snf_port, args.baud, log.on_line, stop))
 
     print(f"Buổi thu: {session_id}\nThư mục: {log.dir}")
-    print("Phím: E trống | A/W hoạt động | S yên | F ngã | D nằm sau ngã | B thở bất thường | N phòng bên | P tạm dừng | "
-          "+/- người vào/ra | T ghi chú | Q kết thúc")
+    print("Trạng thái: E trống | A/W đi lại | S yên | D nằm sau ngã | B thở bất thường | N phòng bên | P tạm dừng\n"
+          "Động tác:   F ngã | G ngồi xuống | U đứng dậy | L nằm xuống | C cúi nhặt\n"
+          "Khác:       +/- người vào/ra | R nhịp thở đáp án | T ghi chú | Q kết thúc")
     for s in sources:
         s.start()
 
@@ -516,6 +531,18 @@ def main():
                         kb.resume()
                         if note:
                             log.add_label("NOTE", note)
+                    elif k == "r":
+                        kb.restore()
+                        val = input("\nNhịp thở đáp án (nhịp/phút, 0 = nín thở): ").strip().replace(",", ".")
+                        kb.resume()
+                        try:
+                            bpm = float(val)
+                        except ValueError:
+                            bpm = -1
+                        if 0 <= bpm <= 60:
+                            log.add_label("RATE", f"{bpm:g}")
+                        else:
+                            print(f"[!] '{val}' không phải số nhịp hợp lệ (0–60), bỏ qua.")
                 now = time.time()
                 if now - prev_t >= 2:
                     snap = log.snapshot()

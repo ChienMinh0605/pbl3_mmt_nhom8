@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mô phỏng 3D – nhánh người</title>
+<style>
+:root {
+  --bg: #f4f4f5; --panel: #ffffff; --line: #e4e4e7; --text: #18181b; --muted: #71717a; --soft: #f4f4f5;
+  --accent: #dc2626; --accent-soft: #fef2f2; --teal: #0d9488; --radius: 10px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 Inter, "Segoe UI", system-ui, sans-serif; }
+header { height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 18px; background: var(--panel);
+  border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+header .sub { color: var(--muted); font-size: 13px; }
+header .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+main { display: grid; grid-template-columns: 330px 1fr; height: calc(100% - 52px); }
+aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 16px; }
+aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 8px; }
+aside h2:first-child { margin-top: 0; }
+label.field { display: block; margin: 8px 0 4px; color: var(--muted); font-size: 12px; }
+select, input[type=number], input[type=text], textarea {
+  width: 100%; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 9px; }
+textarea { font: 12px/1.5 ui-monospace, "DejaVu Sans Mono", monospace; resize: vertical; min-height: 96px; }
+textarea[readonly] { background: var(--soft); color: var(--muted); }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > * { flex: 1; }
+.check { display: flex; gap: 8px; align-items: center; margin: 8px 0; cursor: pointer; }
+.check input { width: 16px; height: 16px; }
+button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: #a1a1aa; }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--text); color: #fff; border-color: var(--text); width: 100%; padding: 10px; font-weight: 600; }
+button.primary:hover { background: #27272a; }
+button.small { padding: 3px 8px; font-size: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.msg { margin-top: 10px; font-size: 13px; padding: 8px 10px; border-radius: 8px; display: none; white-space: pre-wrap; }
+.msg.err { display: block; background: var(--accent-soft); color: #991b1b; }
+.msg.ok { display: block; background: #f0fdf4; color: #166534; word-break: break-all; }
+.hidden { display: none !important; }
+section.view { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; padding: 12px; min-height: 0; }
+.cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.card .k { font-size: 12px; color: var(--muted); }
+.card .v { font-size: 20px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 15px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; min-height: 0; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); position: relative;
+  min-height: 0; overflow: hidden; }
+.box .title { position: absolute; top: 8px; left: 12px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.box .opt { position: absolute; top: 6px; right: 10px; font-size: 12px; color: var(--muted); display: flex; gap: 6px;
+  align-items: center; z-index: 1; cursor: pointer; background: rgba(255,255,255,.85); padding: 2px 6px; border-radius: 6px; }
+.box canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.charts { display: grid; grid-template-rows: 1fr 1fr; gap: 12px; min-height: 0; }
+.left { display: grid; grid-template-rows: 2.2fr 1fr; gap: 12px; min-height: 0; }
+.transport { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.transport .row { flex-wrap: nowrap; }
+.transport .row > * { flex: none; }
+#timeline { width: 100%; height: 46px; display: block; cursor: pointer; margin-top: 8px; }
+#clock { font-variant-numeric: tabular-nums; min-width: 120px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.keys { color: var(--muted); font-size: 12px; margin-left: auto !important; }
+.empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted);
+  text-align: center; padding: 20px; }
+.spinner { width: 16px; height: 16px; border: 2px solid #d4d4d8; border-top-color: var(--text); border-radius: 50%;
+  display: inline-block; animation: spin .8s linear infinite; vertical-align: -3px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mô phỏng 3D – nhánh người</h1>
+  <span class="sub">1 TX + 2 RX ở góc phòng · đặc tả v0.3</span>
+  <span class="status" id="status">Chọn kịch bản rồi bấm Chạy</span>
+</header>
+<main>
+  <aside>
+    <h2>Kịch bản</h2>
+    <select id="kind"></select>
+    <div id="randomBox" class="hidden">
+      <div class="row">
+        <div><label class="field">Số phút</label><input type="number" id="phut" min="1" max="20" step="1" value="5"></div>
+        <div><label class="check" style="margin-top:26px"><input type="checkbox" id="coKhach"> Có khách</label></div>
+      </div>
+    </div>
+    <label class="field">Các bước (dạng <code>NHÃN:giây[@nhịp]</code>, động tác, <code>+</code>/<code>-</code> khách)</label>
+    <textarea id="plan" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:6px">
+      <button class="small" id="editPlan">Sửa kịch bản này</button>
+      <span></span>
+    </div>
+    <div id="builder" class="hidden">
+      <label class="field">Thêm trạng thái (bấm để thêm vào cuối)</label>
+      <div class="chips" id="stateChips"></div>
+      <label class="field">Thêm động tác</label>
+      <div class="chips" id="actionChips"></div>
+      <label class="field">Khách</label>
+      <div class="chips">
+        <span class="chip" data-add="+">+ khách vào</span>
+        <span class="chip" data-add="-">− khách ra</span>
+        <span class="chip" id="undo">Xoá bước cuối</span>
+        <span class="chip" id="clear">Xoá hết</span>
+      </div>
+    </div>
+
+    <h2>Tuỳ chọn</h2>
+    <div class="row">
+      <div><label class="field">Seed (đổi vị trí, hướng ngã…)</label><input type="number" id="seed" min="0" max="1000000" value="0"></div>
+      <div style="flex:none"><label class="field">&nbsp;</label><button id="dice" title="Seed ngẫu nhiên">Đổi</button></div>
+    </div>
+    <label class="field">Nhiễu đo: <b id="noiseVal">0.05</b></label>
+    <input type="range" id="noise" min="0" max="0.15" step="0.01" value="0.05" style="width:100%">
+    <label class="check"><input type="checkbox" id="nguoiBam"> Có người bấm phím ngồi trong phòng</label>
+
+    <div style="margin-top:14px"><button class="primary" id="run">Chạy mô phỏng</button></div>
+    <div class="msg" id="msg"></div>
+
+    <h2>Lưu thành buổi thu</h2>
+    <div class="row">
+      <div><label class="field">Tên buổi (tag)</label><input type="text" id="tag" value="sim" maxlength="40"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="kemHinh" checked> Kèm ảnh tổng quan (mo_phong.png)</label>
+    <button id="save" disabled style="width:100%">Lưu vào data/raw/</button>
+    <div class="msg" id="saveMsg"></div>
+  </aside>
+
+  <section class="view">
+    <div class="cards">
+      <div class="card"><div class="k">Thời gian</div><div class="v" id="cTime">–</div></div>
+      <div class="card"><div class="k">Nhãn hiện tại</div><div class="v" id="cLabel">–</div></div>
+      <div class="card"><div class="k">Tư thế</div><div class="v" id="cPose">–</div></div>
+      <div class="card"><div class="k">Số người trong phòng</div><div class="v" id="cCount">–</div></div>
+      <div class="card"><div class="k">Nhịp thở: đáp án / thuật toán</div><div class="v" id="cBpm">–</div>
+        <div class="k" id="cBpmEst" title="nhip_tho.py, cửa sổ 30 giây, chạy mỗi 3 giây khi ngồi / nằm yên">–</div></div>
+    </div>
+    <div class="stage">
+      <div class="left">
+      <div class="box"><canvas id="room"></canvas><div class="title">Nhìn từ trên xuống</div>
+        <label class="opt" title="Nét đứt: sóng dội một lần trên tường tới từng RX. Đường đang bị người che vẽ mờ đi.">
+          <input type="checkbox" id="showBounce" checked> Hiện sóng dội tường</label>
+        <div class="empty" id="emptyRoom"><div>Chưa có mô phỏng.<br>Chọn kịch bản ở bên trái rồi bấm <b>Chạy mô phỏng</b>.</div></div></div>
+      <div class="box"><canvas id="side"></canvas>
+        <div class="title">Nhìn ngang dọc đường chéo phòng (từ góc TX): độ cao người, ăng-ten, sàn, trần</div></div>
+      </div>
+      <div class="charts">
+        <div class="box"><canvas id="rx1"></canvas><div class="title">RX1 – biên độ trung bình & từng sóng mang con (20 giây gần nhất)</div></div>
+        <div class="box"><canvas id="rx2"></canvas><div class="title">RX2 – biên độ trung bình & từng sóng mang con (20 giây gần nhất)</div></div>
+      </div>
+    </div>
+    <div class="transport">
+      <div class="row">
+        <button id="restart" title="Về đầu (Home)">⏮</button>
+        <button id="play" title="Chạy / dừng (Space)" style="min-width:84px">▶ Chạy</button>
+        <button id="back" title="Lùi 5 giây (←)">−5 s</button>
+        <button id="fwd" title="Tới 5 giây (→)">+5 s</button>
+        <select id="speed" style="width:auto">
+          <option value="0.5">× 0.5</option><option value="1">× 1</option><option value="2" selected>× 2</option>
+          <option value="4">× 4</option><option value="8">× 8</option><option value="16">× 16</option>
+        </select>
+        <span id="clock">0.0 / 0.0 s</span>
+        <span class="keys">Space: chạy/dừng · ← →: tua 5 s · + −: tốc độ · bấm vào dải dưới để tua</span>
+      </div>
+      <canvas id="timeline"></canvas>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const WIN = 20;                                   // giây hiển thị trên biểu đồ
+let INFO = null, D = null, HEAT = {}, lastReq = null;
+const st = { t: 0, playing: false, speed: 2, last: 0 };
+
+// ------------------------------------------------------------ tiện ích
+function setStatus(text, busy) { $("#status").innerHTML = (busy ? '<span class="spinner"></span> ' : "") + text; }
+function showMsg(el, text, ok) { el.className = "msg " + (ok ? "ok" : "err"); el.textContent = text; }
+function hideMsg(el) { el.className = "msg"; el.textContent = ""; }
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function fitCanvas(c) {
+  const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: r.width, h: r.height };
+}
+function labelAt(t) {
+  if (!D) return "";
+  for (const [n, a, b] of D.spans) if (t >= a && t < b) return n;
+  return D.spans.length ? D.spans[D.spans.length - 1][0] : "";
+}
+// bảng màu cho bản đồ nhiệt: xanh đậm → xanh lơ → vàng
+const LUT = (() => {
+  const stops = [[0, [24, 24, 64]], [0.35, [33, 102, 172]], [0.6, [67, 170, 139]], [0.82, [230, 200, 70]], [1, [255, 245, 200]]];
+  const out = new Uint8ClampedArray(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const x = i / 255; let k = 0;
+    while (k < stops.length - 2 && x > stops[k + 1][0]) k++;
+    const [x0, c0] = stops[k], [x1, c1] = stops[k + 1], u = (x - x0) / (x1 - x0);
+    for (let j = 0; j < 3; j++) out[i * 3 + j] = c0[j] + (c1[j] - c0[j]) * u;
+  }
+  return out;
+})();
+
+// ------------------------------------------------------------ bảng điều khiển
+async function loadInfo() {
+  INFO = await (await fetch("/api/info")).json();
+  const kind = $("#kind");
+  for (const [k, v] of Object.entries(INFO.presets)) kind.add(new Option(v, k));
+  kind.add(new Option("Ngẫu nhiên (theo seed)", "ngau-nhien"));
+  kind.add(new Option("Tự viết", "tu-viet"));
+  const chip = (code, color, add) => {
+    const el = document.createElement("span");
+    el.className = "chip"; el.dataset.add = add; el.title = code;
+    el.innerHTML = `<i style="background:${color}"></i>${INFO.names[code]}`;
+    return el;
+  };
+  for (const s of INFO.states) {
+    const add = s === "BREATH_ABN" ? `${s}:20@35` : INFO.breathing.includes(s) ? `${s}:30@15` : `${s}:20`;
+    $("#stateChips").append(chip(s, INFO.colors[s], add));
+  }
+  for (const a of Object.keys(INFO.actions)) $("#actionChips").append(chip(a, INFO.colors[a], a));
+  const lg = $("#legend");
+  for (const [k, v] of Object.entries(INFO.names))
+    lg.insertAdjacentHTML("beforeend", `<span><i style="background:${INFO.colors[k]}"></i>${v}</span>`);
+  lg.insertAdjacentHTML("beforeend", `<span><i style="background:#b91c1c;height:4px"></i>Đợt nhiễu chen ngang</span>`);
+  onKind();
+}
+function onKind() {
+  const k = $("#kind").value, plan = $("#plan");
+  $("#randomBox").classList.toggle("hidden", k !== "ngau-nhien");
+  $("#builder").classList.toggle("hidden", k !== "tu-viet");
+  $("#editPlan").classList.toggle("hidden", k === "tu-viet" || k === "ngau-nhien");
+  plan.readOnly = k !== "tu-viet";
+  if (k === "ngau-nhien") plan.value = "(tạo ngẫu nhiên từ seed khi bấm Chạy)";
+  else if (k !== "tu-viet") plan.value = INFO.plans[k].split(",").join(", ");
+}
+function addStep(step) {
+  const p = $("#plan"), cur = p.value.trim().replace(/,\s*$/, "");
+  p.value = cur ? `${cur}, ${step}` : step;
+}
+function request() {
+  return {
+    kich_ban: $("#kind").value, plan: $("#plan").value.replace(/\s+/g, ""), seed: +$("#seed").value,
+    noise: +$("#noise").value, nguoi_bam: $("#nguoiBam").checked, phut: +$("#phut").value, co_khach: $("#coKhach").checked,
+  };
+}
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.loi || r.statusText);
+  return j;
+}
+async function runSim() {
+  const btn = $("#run"); hideMsg($("#msg")); hideMsg($("#saveMsg"));
+  btn.disabled = true; setStatus("Đang tính kênh truyền…", true);
+  try {
+    const req = request();
+    const t0 = performance.now();
+    D = await post("/api/chay", req);
+    lastReq = req;
+    if (req.kich_ban === "ngau-nhien") $("#plan").value = D.plan.split(",").join(", ");
+    prepare();
+    st.t = 0; st.playing = true; st.speed = +$("#speed").value;
+    $("#save").disabled = false; $("#emptyRoom").classList.add("hidden");
+    setStatus(`Xong trong ${((performance.now() - t0) / 1000).toFixed(1)} s · ${D.duration.toFixed(0)} giây dữ liệu · seed ${D.seed}`);
+  } catch (e) {
+    showMsg($("#msg"), "Lỗi: " + e.message); setStatus("Kịch bản có lỗi");
+  } finally { btn.disabled = false; }
+}
+async function saveSession() {
+  if (!lastReq) return;
+  const btn = $("#save"); btn.disabled = true; hideMsg($("#saveMsg")); setStatus("Đang ghi buổi thu…", true);
+  try {
+    const j = await post("/api/luu", { ...lastReq, tag: $("#tag").value.trim(), hinh: $("#kemHinh").checked });
+    showMsg($("#saveMsg"), "Đã lưu: " + j.thu_muc, true); setStatus("Đã lưu buổi thu");
+  } catch (e) { showMsg($("#saveMsg"), "Lỗi: " + e.message); setStatus("Lưu thất bại"); }
+  finally { btn.disabled = false; }
+}
+
+// ------------------------------------------------------------ chuẩn bị dữ liệu
+function prepare() {
+  HEAT = {};
+  for (const [b, s] of Object.entries(D.heat)) {
+    const raw = Uint8Array.from(atob(s), (c) => c.charCodeAt(0)), rows = 52, cols = raw.length / rows;
+    const cv = document.createElement("canvas"); cv.width = cols; cv.height = rows;
+    const img = cv.getContext("2d").createImageData(cols, rows);
+    for (let i = 0; i < cols; i++) for (let k = 0; k < rows; k++) {
+      const v = raw[i * rows + k], o = ((rows - 1 - k) * cols + i) * 4;      // sóng mang con thấp ở dưới
+      img.data[o] = LUT[v * 3]; img.data[o + 1] = LUT[v * 3 + 1]; img.data[o + 2] = LUT[v * 3 + 2]; img.data[o + 3] = 255;
+    }
+    cv.getContext("2d").putImageData(img, 0, 0);
+    HEAT[b] = cv;
+  }
+  D.range = {};
+  for (const [b, a] of Object.entries(D.amp)) {
+    let lo = Infinity, hi = -Infinity;
+    for (const v of a) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    D.range[b] = [Math.max(0, lo - 0.05), hi + 0.05];
+  }
+  D.behindAny = D.behind.some((v) => v);
+}
+
+// ------------------------------------------------------------ vẽ
+function pose(i) {                                   // nội suy giữa hai khung 25 Hz
+  const f = Math.min(st.t * D.fps, D.x[0].length - 1), a = Math.floor(f), b = Math.min(a + 1, D.x[0].length - 1), u = f - a;
+  const P = [];
+  for (let k = 0; k < D.x.length; k++) {
+    const on = (D.present[a] >> k) & 1;
+    if (!on) { P.push(null); continue; }
+    const both = (D.present[b] >> k) & 1, w = both ? u : 0;
+    const lerp = (arr) => arr[k][a] + (arr[k][b] - arr[k][a]) * w;
+    P.push({ x: lerp(D.x), y: lerp(D.y), h: lerp(D.h), yaw: D.yaw[k][a], behind: (D.behind[a] >> k) & 1 });
+  }
+  return { P, f: a };
+}
+function drawRoom() {
+  const { ctx, w, h } = fitCanvas($("#room"));
+  ctx.clearRect(0, 0, w, h);
+  if (!D) return;
+  const g = D.geo, xmax = D.behindAny ? g.neighbor[1] + 0.2 : g.room[0] + 0.25;
+  const pad = 26, sc = Math.min((w - 2 * pad) / (xmax + 0.25), (h - 2 * pad - 14) / (g.room[1] + 0.5));
+  const ox = pad + 0.25 * sc, oy = h - pad - 0.25 * sc;
+  const X = (x) => ox + x * sc, Y = (y) => oy - y * sc;
+  // phòng
+  ctx.fillStyle = "#fafafa"; ctx.fillRect(X(0), Y(g.room[1]), g.room[0] * sc, g.room[1] * sc);
+  ctx.lineWidth = 3; ctx.strokeStyle = "#27272a"; ctx.strokeRect(X(0), Y(g.room[1]), g.room[0] * sc, g.room[1] * sc);
+  if (D.behindAny) {
+    const [x0, x1, y0, y1] = g.neighbor;
+    ctx.fillStyle = "#eff6ff"; ctx.fillRect(X(x0), Y(y1), (x1 - x0) * sc, (y1 - y0) * sc);
+    ctx.lineWidth = 1; ctx.strokeStyle = "#93c5fd"; ctx.strokeRect(X(x0), Y(y1), (x1 - x0) * sc, (y1 - y0) * sc);
+    ctx.fillStyle = "#3b82f6"; ctx.font = "12px Inter, system-ui"; ctx.fillText("phòng bên", X(x0) + 6, Y(y1) + 16);
+  }
+  ctx.setLineDash([6, 4]); ctx.lineWidth = 1; ctx.strokeStyle = "#a1a1aa";
+  ctx.strokeRect(X(g.area[0]), Y(g.area[3]), (g.area[1] - g.area[0]) * sc, (g.area[3] - g.area[2]) * sc);
+  ctx.setLineDash([]);
+  const { P, f } = pose();
+  // đường truyền: dày và đậm hơn khi biên độ lệch nhiều so với phòng trống
+  for (const [b, p] of Object.entries(g.rx)) {
+    const dev = Math.min(Math.abs(D.amp[b][f] - 1) / 0.35, 1);
+    ctx.strokeStyle = hexA("#0d9488", 0.35 + 0.6 * dev); ctx.lineWidth = 1.5 + 7 * dev;
+    ctx.beginPath(); ctx.moveTo(X(g.tx[0]), Y(g.tx[1])); ctx.lineTo(X(p[0]), Y(p[1])); ctx.stroke();
+  }
+  // sóng dội tường bậc 1: mờ đi khi có người đứng sát (trong ~0,3 m) một đoạn của đường dội
+  if ($("#showBounce").checked) {
+    const near = (p, a, b) => {
+      const abx = b[0] - a[0], aby = b[1] - a[1];
+      const u = Math.max(0, Math.min(1, ((p.x - a[0]) * abx + (p.y - a[1]) * aby) / (abx * abx + aby * aby)));
+      return Math.hypot(p.x - a[0] - u * abx, p.y - a[1] - u * aby) < 0.3;
+    };
+    ctx.setLineDash([5, 4]); ctx.lineWidth = 1.2;
+    for (const paths of Object.values(g.bounces)) for (const [a, m, b] of paths) {
+      const hit = P.some((p) => p && !p.behind && (near(p, a, m) || near(p, m, b)));
+      ctx.strokeStyle = hit ? "rgba(13,148,136,.08)" : "rgba(13,148,136,.35)";
+      ctx.beginPath(); ctx.moveTo(X(a[0]), Y(a[1])); ctx.lineTo(X(m[0]), Y(m[1])); ctx.lineTo(X(b[0]), Y(b[1])); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = "#d4d4d8";
+  for (const [fx, fy] of g.furniture) ctx.fillRect(X(fx) - 4, Y(fy) - 4, 8, 8);
+  // ghế, cửa, người bấm phím
+  ctx.font = "12px Inter, system-ui"; ctx.fillStyle = "#a1a1aa";
+  ctx.fillRect(X(g.chair[0]) - 5, Y(g.chair[1]) - 5, 10, 10); ctx.fillText("ghế / nệm", X(g.chair[0]) + 9, Y(g.chair[1]) + 4);
+  ctx.save(); ctx.translate(X(g.door[0]), Y(g.door[1])); ctx.rotate(Math.PI / 4); ctx.fillRect(-5, -5, 10, 10); ctx.restore();
+  ctx.fillText("cửa", X(g.door[0]) + 10, Y(g.door[1]) + 4);
+  // vệt đi 3 giây gần nhất của người được giám sát
+  const a0 = Math.max(0, f - 3 * D.fps);
+  ctx.strokeStyle = "rgba(239,68,68,.35)"; ctx.lineWidth = 2; ctx.beginPath();
+  let pen = false;
+  for (let i = a0; i <= f; i++) {
+    if (!(D.present[i] & 1)) { pen = false; continue; }
+    const px = X(D.x[0][i]), py = Y(D.y[0][i]);
+    pen ? ctx.lineTo(px, py) : ctx.moveTo(px, py); pen = true;
+  }
+  ctx.stroke();
+  // người
+  const label = labelAt(st.t);
+  P.forEach((p, k) => {
+    if (!p) return;
+    const lying = Math.max(0, Math.min(1, (0.6 - p.h) / 0.6));
+    let col = k === 0 ? (INFO.colors[label] || "#ef4444") : k === 3 ? "#52525b" : p.h < 0.8 ? "#facc15" : "#a1a1aa";
+    if (lying > 0.05) {                          // nằm: thân dài theo hướng nằm
+      const L = 0.8 * lying * sc, dx = Math.cos(p.yaw) * L, dy = -Math.sin(p.yaw) * L;
+      ctx.strokeStyle = hexA(col, 0.55); ctx.lineCap = "round"; ctx.lineWidth = 0.32 * sc;
+      ctx.beginPath(); ctx.moveTo(X(p.x) - dx, Y(p.y) - dy); ctx.lineTo(X(p.x) + dx, Y(p.y) + dy); ctx.stroke();
+    }
+    const r = (k === 0 ? 0.16 : 0.13) * sc * (0.75 + 0.25 * Math.min(p.h, 1));
+    ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), r, 0, 2 * Math.PI);
+    ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke();
+    ctx.lineWidth = 1; ctx.strokeStyle = "#27272a"; ctx.stroke();
+    ctx.fillStyle = "#3f3f46"; ctx.font = "11px Inter, system-ui";
+    ctx.fillText(k === 0 ? "người được giám sát" : k === 3 ? "người bấm phím" : `khách ${k}`, X(p.x) + r + 4, Y(p.y) - r);
+  });
+  // TX, RX
+  ctx.fillStyle = "#ea580c"; ctx.fillRect(X(g.tx[0]) - 8, Y(g.tx[1]) - 8, 16, 16);
+  ctx.fillStyle = "#27272a"; ctx.font = "600 12px Inter, system-ui"; ctx.fillText("TX", X(g.tx[0]) + 12, Y(g.tx[1]) - 8);
+  for (const [b, p] of Object.entries(g.rx)) {
+    ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 8, 0, 2 * Math.PI); ctx.fillStyle = "#0d9488"; ctx.fill();
+    ctx.fillStyle = "#27272a"; ctx.fillText(b, X(p[0]) + 12, Y(p[1]) + 4);
+  }
+  // thước 1 m
+  ctx.strokeStyle = "#71717a"; ctx.lineWidth = 1.5; ctx.beginPath();
+  ctx.moveTo(w - pad - sc, h - 12); ctx.lineTo(w - pad, h - 12); ctx.stroke();
+  ctx.fillStyle = "#71717a"; ctx.font = "11px Inter, system-ui"; ctx.fillText("1 m", w - pad - sc / 2 - 9, h - 16);
+}
+function drawSide() {
+  const { ctx, w, h } = fitCanvas($("#side"));
+  ctx.clearRect(0, 0, w, h);
+  if (!D) return;
+  const g = D.geo, U = (p) => (p[0] + p[1]) / Math.SQRT2;          // chiếu lên đường chéo phòng đi qua góc TX
+  const umax = (g.room[0] + g.room[1]) / Math.SQRT2, H = g.height;
+  const padL = 34, padR = 14, padT = 26, padB = 16;
+  const sc = Math.min((w - padL - padR) / umax, (h - padT - padB) / H);
+  const X = (u) => padL + u * sc, Z = (z) => h - padB - z * sc;
+  ctx.fillStyle = "#fafafa"; ctx.fillRect(X(0), Z(H), umax * sc, H * sc);
+  ctx.strokeStyle = "#27272a"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(X(0), Z(0)); ctx.lineTo(X(umax), Z(0)); ctx.stroke();           // sàn
+  ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(X(0), Z(H)); ctx.lineTo(X(umax), Z(H)); ctx.stroke();  // trần
+  ctx.fillStyle = "#71717a"; ctx.font = "11px Inter, system-ui";
+  ctx.fillText("trần 2,8 m", X(umax) - 62, Z(H) + 13); ctx.fillText("sàn", X(umax) - 24, Z(0) - 5);
+  const ut = U(g.tx), ur = U(g.rx.RX1), za = g.ant_z, um = (ut + ur) / 2;
+  ctx.setLineDash([5, 4]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(13,148,136,.35)";
+  for (const zb of [0, H]) {                                     // dội sàn, dội trần
+    ctx.beginPath(); ctx.moveTo(X(ut), Z(za)); ctx.lineTo(X(um), Z(zb)); ctx.lineTo(X(ur), Z(za)); ctx.stroke();
+  }
+  ctx.setLineDash([]); ctx.strokeStyle = "rgba(13,148,136,.8)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(X(ut), Z(za)); ctx.lineTo(X(ur), Z(za)); ctx.stroke();
+  const { P } = pose(), label = labelAt(st.t);
+  P.forEach((p, k) => {
+    if (!p || p.behind) return;
+    const col = k === 0 ? (INFO.colors[label] || "#ef4444") : k === 3 ? "#52525b" : p.h < 0.8 ? "#facc15" : "#a1a1aa";
+    const u = U([p.x, p.y]), lying = Math.max(0, Math.min(1, (0.6 - p.h) / 0.6)), top = 0.3 + 1.4 * Math.max(0, Math.min(1, p.h));
+    ctx.fillStyle = hexA(col, 0.75);
+    if (lying > 0.6) {                                           // nằm: thân nằm ngang sát sàn
+      const L = 0.85 * Math.abs(Math.cos(p.yaw - Math.PI / 4)) + 0.2;
+      ctx.fillRect(X(u - L), Z(0.3), 2 * L * sc, 0.28 * sc);
+    } else {
+      ctx.fillRect(X(u - 0.16), Z(top - 0.2), 0.32 * sc, (top - 0.2) * sc);
+      ctx.beginPath(); ctx.arc(X(u), Z(top - 0.1), 0.11 * sc, 0, 2 * Math.PI); ctx.fill();
+    }
+  });
+  ctx.fillStyle = "#ea580c"; ctx.fillRect(X(ut) - 6, Z(za) - 6, 12, 12);
+  ctx.beginPath(); ctx.arc(X(ur), Z(za), 6, 0, 2 * Math.PI); ctx.fillStyle = "#0d9488"; ctx.fill();
+  ctx.fillStyle = "#27272a"; ctx.font = "600 11px Inter, system-ui";
+  ctx.fillText("TX", X(ut) - 6, Z(za) - 10); ctx.fillText("RX1, RX2", X(ur) - 26, Z(za) - 10);
+  ctx.fillStyle = "#71717a"; ctx.font = "11px Inter, system-ui";
+  ctx.fillText(`ăng-ten cao ${String(za).replace(".", ",")} m`, X(ut) + 10, Z(za) + 16);
+}
+function drawChart(id, board) {
+  const { ctx, w, h } = fitCanvas($(id));
+  ctx.clearRect(0, 0, w, h);
+  if (!D) return;
+  const L = 44, R = 10, T = 26, B = 22, H1 = (h - T - B) * 0.58, gap = 8, H2 = h - T - B - H1 - gap;
+  const t1 = st.t, t0 = t1 - WIN, X = (t) => L + (t - t0) / WIN * (w - L - R);
+  // nền theo nhãn + vạch động tác
+  ctx.save(); ctx.beginPath(); ctx.rect(L, T, w - L - R, H1); ctx.clip();
+  for (const [n, a, b] of D.spans) {
+    if (b < t0 || a > t1) continue;
+    const act = n in INFO.actions;
+    ctx.fillStyle = hexA(INFO.colors[n], act ? 0.22 : 0.13);
+    ctx.fillRect(X(Math.max(a, t0)), T, X(Math.min(b, t1)) - X(Math.max(a, t0)), H1);
+    if (act) {
+      ctx.fillStyle = INFO.colors[n]; ctx.fillRect(X(a) - 1, T, 2, H1);
+      ctx.font = "600 11px Inter, system-ui"; ctx.fillText(INFO.names[n], X(a) + 4, T + 13);
+    }
+  }
+  for (const [a, b] of D.bursts) {                                  // đợt nhiễu: sọc đỏ trên cùng
+    if (b < t0 || a > t1) continue;
+    ctx.fillStyle = "rgba(185,28,28,.55)"; ctx.fillRect(X(Math.max(a, t0)), T, X(Math.min(b, t1)) - X(Math.max(a, t0)), 4);
+  }
+  // đường biên độ
+  const [lo, hi] = D.range[board], Yv = (v) => T + H1 - (v - lo) / (hi - lo) * H1, amp = D.amp[board];
+  const i0 = Math.max(0, Math.floor(t0 * D.fps)), i1 = Math.min(amp.length - 1, Math.floor(t1 * D.fps));
+  ctx.strokeStyle = "#18181b"; ctx.lineWidth = 1.3; ctx.beginPath();
+  for (let i = i0; i <= i1; i++) { const x = X(i / D.fps), y = Yv(amp[i]); i === i0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+  ctx.stroke(); ctx.restore();
+  // trục
+  ctx.strokeStyle = "#e4e4e7"; ctx.lineWidth = 1; ctx.strokeRect(L, T, w - L - R, H1);
+  ctx.fillStyle = "#71717a"; ctx.font = "11px Inter, system-ui"; ctx.textAlign = "right";
+  for (const v of [lo + 0.05, 1, hi - 0.05]) { if (v >= lo && v <= hi) ctx.fillText(v.toFixed(1), L - 6, Yv(v) + 4); }
+  ctx.textAlign = "center";
+  for (let s = Math.ceil(t0 / 5) * 5; s <= t1; s += 5) if (s >= 0) ctx.fillText(`${s}s`, X(s), h - 6);
+  ctx.textAlign = "left";
+  // bản đồ nhiệt sóng mang con
+  const hc = HEAT[board], y2 = T + H1 + gap;
+  ctx.fillStyle = "#18183f"; ctx.fillRect(L, y2, w - L - R, H2);
+  if (hc) {
+    const s0 = Math.max(0, t0 * D.heat_hz), s1 = Math.min(hc.width, t1 * D.heat_hz);
+    if (s1 > s0) ctx.drawImage(hc, s0, 0, s1 - s0, 52, X(s0 / D.heat_hz), y2, X(s1 / D.heat_hz) - X(s0 / D.heat_hz), H2);
+  }
+  ctx.fillStyle = "#71717a"; ctx.textAlign = "right"; ctx.fillText("52 sc", L - 6, y2 + H2 / 2 + 4); ctx.textAlign = "left";
+}
+function drawTimeline() {
+  const { ctx, w, h } = fitCanvas($("#timeline"));
+  ctx.clearRect(0, 0, w, h);
+  if (!D) { ctx.fillStyle = "#f4f4f5"; ctx.fillRect(0, 8, w, h - 16); return; }
+  const X = (t) => t / D.duration * w;
+  for (const [n, a, b] of D.spans) {
+    const act = n in INFO.actions;
+    ctx.fillStyle = hexA(INFO.colors[n], act ? 0.95 : 0.4);
+    ctx.fillRect(X(a), act ? 4 : 12, Math.max(act ? 3 : 1, X(b) - X(a)), act ? h - 8 : h - 24);
+  }
+  ctx.fillStyle = "#b91c1c";                                       // đợt nhiễu chen ngang
+  for (const [a, b] of D.bursts) ctx.fillRect(X(a), h - 4, Math.max(3, X(b) - X(a)), 4);
+  ctx.fillStyle = "#18181b"; ctx.fillRect(X(st.t) - 1, 0, 2, h);
+  ctx.beginPath(); ctx.arc(X(st.t), h / 2, 6, 0, 2 * Math.PI); ctx.fill();
+}
+const shown = {};
+function put(id, html) { if (shown[id] !== html) { shown[id] = html; $(id).innerHTML = html; } }
+function drawCards() {
+  if (!D) return;
+  const f = Math.min(Math.floor(st.t * D.fps), D.count.length - 1), n = labelAt(st.t), p = pose().P[0];
+  put("#cTime", `${st.t.toFixed(1)} s`);
+  put("#cLabel", n ? `<span class="badge" style="background:${hexA(INFO.colors[n], 0.18)};color:#18181b">${INFO.names[n]}</span>` : "–");
+  put("#cPose", !p || p.behind ? "–" : p.h >= 0.85 ? "Đứng" : p.h >= 0.45 ? (n === "PICK_UP" ? "Cúi" : "Ngồi") : p.h >= 0.15 ? "Đang hạ xuống" : "Nằm");
+  put("#cCount", String(D.count[f]));
+  const b = D.bpm[f];
+  put("#cBpm", b < 0 ? "–" : b === 0 ? "Nín thở" : `${b} nhịp/phút`);
+  let est = null;                                                 // kết quả thuật toán gần nhất (trong 3,5 s)
+  for (const e of D.breath_est) { if (e[0] <= st.t && e[0] > st.t - 3.5) est = e; }
+  const WHY = { "khong-thay": "không thấy nhịp thở", "cu-dong": "đang cử động", "ngan": "chưa đủ 30 s" };
+  put("#cBpmEst", !est ? "thuật toán: chưa đủ 30 s ngồi yên" : est[1] === null ? `thuật toán: ${WHY[est[2]] || "–"}`
+      : `thuật toán: ${est[1]} nhịp/phút`);
+  put("#clock", `${st.t.toFixed(1)} / ${D.duration.toFixed(1)} s`);
+  put("#play", st.playing ? "⏸ Dừng" : "▶ Chạy");
+}
+function frame(ts) {
+  if (st.playing && D) {
+    st.t += (ts - st.last) / 1000 * st.speed;
+    if (st.t >= D.duration) { st.t = D.duration; st.playing = false; }
+  }
+  st.last = ts;
+  drawRoom(); drawSide(); drawChart("#rx1", "RX1"); drawChart("#rx2", "RX2"); drawTimeline(); drawCards();
+  requestAnimationFrame(frame);
+}
+
+// ------------------------------------------------------------ sự kiện
+function seek(t) { if (D) st.t = Math.max(0, Math.min(D.duration, t)); }
+function togglePlay() { if (!D) return; if (st.t >= D.duration) st.t = 0; st.playing = !st.playing; }
+function setSpeed(dir) {
+  const sel = $("#speed"), i = Math.max(0, Math.min(sel.options.length - 1, sel.selectedIndex + dir));
+  sel.selectedIndex = i; st.speed = +sel.value;
+}
+$("#kind").addEventListener("change", onKind);
+$("#editPlan").addEventListener("click", () => {
+  const text = $("#plan").value; $("#kind").value = "tu-viet"; onKind(); $("#plan").value = text;
+});
+document.addEventListener("click", (e) => {
+  const c = e.target.closest(".chip[data-add]");
+  if (c) addStep(c.dataset.add);
+});
+$("#undo").addEventListener("click", () => {
+  const parts = $("#plan").value.split(",").map((s) => s.trim()).filter(Boolean); parts.pop();
+  $("#plan").value = parts.join(", ");
+});
+$("#clear").addEventListener("click", () => { $("#plan").value = ""; });
+$("#dice").addEventListener("click", () => { $("#seed").value = Math.floor(Math.random() * 100000); });
+$("#noise").addEventListener("input", (e) => { $("#noiseVal").textContent = (+e.target.value).toFixed(2); });
+$("#run").addEventListener("click", runSim);
+$("#save").addEventListener("click", saveSession);
+$("#play").addEventListener("click", togglePlay);
+$("#restart").addEventListener("click", () => seek(0));
+$("#back").addEventListener("click", () => seek(st.t - 5));
+$("#fwd").addEventListener("click", () => seek(st.t + 5));
+$("#speed").addEventListener("change", (e) => { st.speed = +e.target.value; });
+const tl = $("#timeline");
+let dragging = false;
+const tlSeek = (e) => { if (!D) return; const r = tl.getBoundingClientRect(); seek((e.clientX - r.left) / r.width * D.duration); };
+tl.addEventListener("pointerdown", (e) => { dragging = true; tl.setPointerCapture(e.pointerId); tlSeek(e); });
+tl.addEventListener("pointermove", (e) => { if (dragging) tlSeek(e); });
+tl.addEventListener("pointerup", () => { dragging = false; });
+document.addEventListener("keydown", (e) => {
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (e.key === " ") { e.preventDefault(); togglePlay(); }
+  else if (e.key === "ArrowRight") seek(st.t + 5);
+  else if (e.key === "ArrowLeft") seek(st.t - 5);
+  else if (e.key === "+" || e.key === "=") setSpeed(1);
+  else if (e.key === "-") setSpeed(-1);
+  else if (e.key === "Home") seek(0);
+});
+loadInfo().then(() => requestAnimationFrame((ts) => { st.last = ts; frame(ts); }))
+  .catch((e) => setStatus("Không kết nối được server: " + e.message));
+</script>
+</body>
+</html>

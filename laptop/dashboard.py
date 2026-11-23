@@ -1,13 +1,14 @@
 """Dashboard thời gian thực cho đề tài Wi-Fi Sensing (Nhóm 8) – phong cách shadcn/ui.
 
 Chạy song song với logger.py:
-    Terminal 1:  python logger.py --rx-port /dev/ttyACM0 --snf-port /dev/ttyACM1 --tag demo
+    Terminal 1:  python logger.py --rx-port /dev/ttyACM0 --rx-port /dev/ttyACM1 --snf-port /dev/ttyACM2 --tag demo
                  (hoặc: python logger.py --simulate --tag demo)
     Terminal 2:  streamlit run dashboard.py      → mở http://localhost:8501
     (thư mục dữ liệu khác: streamlit run dashboard.py -- --data-dir /duong/dan/data)
 
 Dashboard đọc phần mới của các file trong data/raw/<buổi thu>/ mỗi vài giây:
-- Nhánh người: 6 giây CSI gần nhất → đặc trưng (dac_trung.py) → models/model_latest.joblib → Empty/Occupied.
+- Nhánh người: 6 giây CSI gần nhất của từng RX → đặc trưng (features.py, giống hệt lúc train) →
+  models/model_latest.joblib → Empty/Occupied. Đọc được buổi thu v0.3 (nhiều RX, cột board) và v0.2.
   Chống nhấp nháy: trạng thái hiển thị chỉ đổi khi mô hình đoán khác liên tục ≥ 6 giây (bật/tắt ở thanh bên).
 - Nhánh thiết bị: BẢN TẠM, đếm số nguồn (mac_hash) thấy trong 60 giây gần nhất. Sẽ thay bằng máy trạng thái
   Sherlock của Phúc.
@@ -29,7 +30,7 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from dac_trung import DEFAULT_KEPT, csi_amplitude, window_features  # noqa: E402
+from features import csi_amplitude, kept_subcarriers, window_features  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 WINDOW_S, RATE, VALID_RATIO = 6.0, 100, 0.7
@@ -94,8 +95,7 @@ class Live:
     def __init__(self, session_dir):
         self.dir = Path(session_dir)
         self.meta = self._meta()
-        self.kept = DEFAULT_KEPT
-        self.csi = deque(maxlen=int(RATE * 30))          # 30 giây CSI gần nhất
+        self.csi = {}                                   # board → 30 giây CSI gần nhất
         self.probe = deque()
         self.tails = {
             "csi": Tail(self.dir / "csi.csv", start_from_end_bytes=400_000),
@@ -129,15 +129,16 @@ class Live:
                 amp = csi_amplitude(r["csi_hex"], r["first_word_invalid"] == "1")
             except ValueError:
                 continue
-            self.csi.append((float(r["host_time"]), float(r["rssi"]), amp))
+            b = r.get("board") or "RX1"                  # v0.2 không có cột board
+            self.csi.setdefault(b, deque(maxlen=int(RATE * 30))).append((float(r["host_time"]), float(r["rssi"]), amp))
         for r in self.tails["probe"].read():
             if r["excluded"] != "1":
                 self.probe.append((float(r["host_time"]), r["mac_hash"]))
         for r in self.tails["stat"].read():
             self.last_stat[r["board"]] = r
-            if r["board"] == "RX" and int(r["n_queue_drop"]) > 0:
+            if r["board"].startswith("RX") and int(r["n_queue_drop"]) > 0:
                 self.drops_seen += int(r["n_queue_drop"])
-                self.event(float(r["host_time"]), "Cảnh báo", f"#2 mất {r['n_queue_drop']} bản ghi vì queue đầy")
+                self.event(float(r["host_time"]), "Cảnh báo", f"{r['board']} mất {r['n_queue_drop']} bản ghi vì queue đầy")
         for r in self.tails["labels"].read():
             t = float(r["host_time"])
             if r["event"] == "STATE":
@@ -146,9 +147,13 @@ class Live:
             elif r["event"] == "COUNT":
                 self.people = max(0, self.people + int(r["value"]))
                 self.event(t, "Đếm người", f"{'Có người vào' if r['value'] == '+1' else 'Có người ra'} · còn {self.people}")
+            elif r["event"] == "ACTION":
+                self.event(t, "Động tác", f"Bấm động tác {r['value']}")
+            elif r["event"] == "RATE":
+                self.event(t, "Nhịp thở", f"Nhịp thở đáp án {r['value']} nhịp/phút")
             elif r["event"] == "NOTE":
                 self.event(t, "Ghi chú", r["value"])
-        times = ([self.csi[-1][0]] if self.csi else []) + ([self.probe[-1][0]] if self.probe else [])
+        times = [q[-1][0] for q in self.csi.values() if q] + ([self.probe[-1][0]] if self.probe else [])
         if times:
             self.latest_t = max(times)
         if self.latest_t:
@@ -157,25 +162,31 @@ class Live:
 
     # ---- nhánh người
     def human(self, bundle):
-        if not self.csi:
+        if not any(self.csi.values()):
             return {"status": "Chưa có dữ liệu CSI"}
-        t_end = self.csi[-1][0]
-        win = [x for x in self.csi if x[0] > t_end - WINDOW_S]
+        t_end = max(q[-1][0] for q in self.csi.values() if q)
         need = VALID_RATIO * RATE * WINDOW_S
-        if len(win) < need:
-            return {"status": f"Không đủ mẫu ({len(win)}/{need:.0f})", "n": len(win)}
+        feats, n_min = {}, None
+        for i, (b, q) in enumerate(sorted(self.csi.items())):
+            win = [x for x in q if x[0] > t_end - WINDOW_S]
+            n_min = len(win) if n_min is None else min(n_min, len(win))
+            if len(win) < need:
+                return {"status": f"{b}: không đủ mẫu ({len(win)}/{need:.0f})", "n": len(win)}
+            amps, rssi = np.vstack([x[2] for x in win]), [x[1] for x in win]
+            feats.update(window_features(amps, rssi, prefix=b.lower() + "_"))   # mô hình v0.3: cột rx1_…, rx2_…
+            if i == 0:
+                feats.update(window_features(amps, rssi))                     # mô hình cũ (v0.2): cột không tiền tố
         if bundle is None:
-            return {"status": "Chưa có mô hình", "n": len(win)}
-        feats = window_features(np.vstack([x[2] for x in win]), [x[1] for x in win], self.kept)
+            return {"status": "Chưa có mô hình", "n": n_min}
         cols = bundle["feature_columns"]
         missing = [c for c in cols if c not in feats]
         if missing:
             return {"status": f"Mô hình cần cột {missing[0]}", "n": len(win)}
         X = np.array([[feats[c] for c in cols]])
         if np.isnan(X).any():
-            return {"status": "Đặc trưng bị trống", "n": len(win)}
+            return {"status": "Đặc trưng bị trống", "n": n_min}
         p = float(bundle["model"].predict_proba(X)[0, 1])
-        return {"status": "ok", "proba": p, "raw": p >= 0.5, "n": len(win), "t": t_end}
+        return {"status": "ok", "proba": p, "raw": p >= 0.5, "n": n_min, "t": t_end}
 
     def apply_smoothing(self, h, enabled):
         """Cập nhật trạng thái hiển thị. Bật chống nhấp nháy: chỉ đổi khi đoán khác liên tục ≥ HOLD_S giây."""
@@ -397,11 +408,12 @@ def panel():
     c2 = kpi("Thiết bị gần đây", str(n_dev), badge(f"{DEVICE_WINDOW_S} giây"),
              "Có thiết bị phát Probe Request" if n_dev else "Không thấy thiết bị",
              "Bản tạm · chờ máy trạng thái Sherlock")
-    rx, snf = live.last_stat.get("RX"), live.last_stat.get("SNF")
-    rate = int(rx["n_rx"]) if rx else None
+    rxs, snf = {b: v for b, v in sorted(live.last_stat.items()) if b.startswith("RX")}, live.last_stat.get("SNF")
+    rate = min(int(v["n_rx"]) for v in rxs.values()) if rxs else None
     c3 = kpi("Tốc độ CSI", f"{rate} mẫu/s" if rate is not None else "—",
              badge(f"mất {live.drops_seen}", "#22c55e" if live.drops_seen == 0 else "#f59e0b"),
-             f"Window {WINDOW_S:g} s: {h.get('n', 0)} mẫu", f"Cần ≥ {VALID_RATIO * RATE * WINDOW_S:.0f} mẫu để dự đoán")
+             " · ".join(f"{b} {v['n_rx']}/s" for b, v in rxs.items()) or f"Window {WINDOW_S:g} s",
+             f"Window {WINDOW_S:g} s: {h.get('n', 0)} mẫu (RX ít nhất), cần ≥ {VALID_RATIO * RATE * WINDOW_S:.0f}")
     c4 = kpi("Sniffer", f"Kênh {snf['channel']}" if snf else "—", badge("1 → 13"),
              f"Dữ liệu mới nhất {ago(age)}" if age is not None else "Chưa có dữ liệu",
              f"Số người đếm tay: {live.people}")
@@ -473,10 +485,12 @@ def panel():
         with st.container(border=True, key="card_csi"):
             st.markdown('<p class="ctitle">Biên độ CSI</p><div class="muted">Trung bình các sóng mang con · 30 giây gần nhất</div>',
                         unsafe_allow_html=True)
-            if live.csi:
-                pts = list(live.csi)[::2]
+            first = next((q for _, q in sorted(live.csi.items()) if q), None)
+            if first:
+                pts = list(first)[::2]
+                kept = kept_subcarriers(len(pts[0][2]))
                 df = pd.DataFrame({"time": [datetime.fromtimestamp(x[0]) for x in pts],
-                                   "amp": [float(np.nanmean(x[2][live.kept])) for x in pts]})
+                                   "amp": [float(np.nanmean(x[2][kept])) for x in pts]})
                 ch = alt.Chart(df).mark_line(color=RED_LIGHT, strokeWidth=1).encode(
                     x=alt.X("time:T", title=None, axis=alt.Axis(format="%H:%M:%S", tickCount=4)),
                     y=alt.Y("amp:Q", title=None, scale=alt.Scale(zero=False)))

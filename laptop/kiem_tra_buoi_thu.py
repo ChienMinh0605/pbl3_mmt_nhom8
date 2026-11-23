@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Kiểm tra chất lượng một buổi thu do logger.py ghi ra (đặc tả v0.1).
+"""Kiểm tra chất lượng một buổi thu do logger.py (hoặc mo_phong.py) ghi ra – đặc tả v0.3, vẫn đọc được v0.2.
 
 Ví dụ:
     python kiem_tra_buoi_thu.py                    # buổi thu mới nhất trong ../data/raw
     python kiem_tra_buoi_thu.py ../data/raw/20261112_1430_phongA
     python kiem_tra_buoi_thu.py --save             # lưu thêm report.txt vào thư mục buổi thu
 
-Báo cáo gồm: tốc độ CSI thực tế, số dòng mất, số window hợp lệ, Probe Request theo kênh và theo
-thiết bị, các đoạn nhãn. Cuối báo cáo là danh sách ĐẠT / CẢNH BÁO / LỖI.
+Báo cáo gồm: tốc độ CSI thực tế của từng RX, số dòng mất, số window hợp lệ, độ khớp rx_seq giữa các RX,
+Probe Request theo kênh và theo thiết bị, các đoạn nhãn, động tác, nhịp thở đáp án. Cuối báo cáo là danh sách
+ĐẠT / CẢNH BÁO / LỖI.
 """
 import argparse
 import csv
@@ -21,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 DEFAULT_RAW = HERE.parent / "data" / "raw"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from nhan import PRESENCE as BINARY, SHORT_OK  # noqa: E402
+from nhan import ACTIONS, PRESENCE as BINARY, SHORT_OK  # noqa: E402
 
 
 # --------------------------------------------------------------------------- đọc file
@@ -106,11 +107,33 @@ def label_segments(labels, t_end):
 
 
 def check_csi(rep, d, csi, stat, args, t0, t1):
-    rep.h("1. CSI (ESP32-C3 #2)")
+    rep.h("1. CSI")
     if not csi:
         rep.p("Không có dòng CSI nào.")
-        rep.bad("Không có dữ liệu CSI (board #2 chưa nối, sai cổng, hoặc firmware chưa gửi dòng CSI).")
+        rep.bad("Không có dữ liệu CSI (RX chưa nối, sai cổng, hoặc firmware chưa gửi dòng CSI).")
         return
+    boards = defaultdict(list)                     # v0.2 không có cột board → coi là một RX
+    for r in csi:
+        boards[r.get("board") or "RX"].append(r)
+    rep.p(f"Các RX: {', '.join(f'{b} ({len(v)} dòng)' for b, v in sorted(boards.items()))}")
+    for b, rows in sorted(boards.items()):
+        rep.p("")
+        rep.p(f"[{b}]")
+        check_rx(rep, b, rows, stat, args, t0, t1)
+    if len(boards) > 1 and "rx_seq" in csi[0]:
+        # rx_seq 12 bit quay vòng sau 4096 gói (~41 s ở 100 gói/s) → ghép theo (rx_seq, khung 20 s của host_time)
+        seen = {b: {(r["rx_seq"], int(float(r["host_time"]) // 20)) for r in rows} for b, rows in boards.items()}
+        common = set.intersection(*seen.values())
+        share = len(common) / max(len(v) for v in seen.values())
+        rep.p("")
+        rep.p(f"Gói nhận được ở mọi RX (cùng rx_seq, cùng lúc): {pct(len(common), max(len(v) for v in seen.values())):.1f}%")
+        if share >= 0.9:
+            rep.ok("Các RX nhận cùng gói của TX (rx_seq khớp) → ghép RX1 với RX2 được.")
+        else:
+            rep.warn(f"rx_seq chỉ khớp {share:.0%} giữa các RX: kiểm tra các RX có cùng lọc theo MAC của TX, cùng kênh.")
+
+
+def check_rx(rep, b, csi, stat, args, t0, t1):
     times = [float(r["host_time"]) for r in csi]
     span = times[-1] - times[0]
     rate = (len(csi) - 1) / span if span > 0 else 0.0
@@ -131,10 +154,10 @@ def check_csi(rep, d, csi, stat, args, t0, t1):
     rep.p(f"Mất theo seq: {lost} dòng ({pct(lost, len(csi) + lost):.2f}%)"
           + (f"; board khởi động lại {resets} lần" if resets else ""))
 
-    drops = sum(int(r["n_queue_drop"]) for r in stat if r["board"] == "RX")
-    filt = sum(int(r["n_filtered"]) for r in stat if r["board"] == "RX")
-    if any(r["board"] == "RX" for r in stat):
-        rep.p(f"Theo dòng STAT của #2: mất do queue đầy {drops}, khung bị lọc vì sai MAC {filt}")
+    drops = sum(int(r["n_queue_drop"]) for r in stat if r["board"] == b)
+    filt = sum(int(r["n_filtered"]) for r in stat if r["board"] == b)
+    if any(r["board"] == b for r in stat):
+        rep.p(f"Theo dòng STAT của {b}: mất do queue đầy {drops}, khung bị lọc vì sai MAC {filt}")
 
     macs = Counter(r["src_mac"] for r in csi)
     lens = Counter(int(r["len"]) for r in csi)
@@ -153,37 +176,37 @@ def check_csi(rep, d, csi, stat, args, t0, t1):
     rep.p(f"Window {args.window:g} giây: {valid}/{n_win} hợp lệ (cần ≥ {need:.0f} mẫu mỗi window)")
 
     if rate >= 0.9 * args.rate:
-        rep.ok(f"Tốc độ CSI {rate:.1f} mẫu/giây.")
+        rep.ok(f"{b}: tốc độ CSI {rate:.1f} mẫu/giây.")
     elif rate >= args.valid_ratio * args.rate:
-        rep.warn(f"Tốc độ CSI {rate:.1f} mẫu/giây, thấp hơn mục tiêu {args.rate:g}. Kiểm tra power save, tần số ping, kênh.")
+        rep.warn(f"{b}: tốc độ CSI {rate:.1f} mẫu/giây, thấp hơn mục tiêu {args.rate:g}. Kiểm tra tốc độ phát của TX, kênh.")
     else:
-        rep.bad(f"Tốc độ CSI chỉ {rate:.1f} mẫu/giây: phần lớn window sẽ không hợp lệ.")
+        rep.bad(f"{b}: tốc độ CSI chỉ {rate:.1f} mẫu/giây: phần lớn window sẽ không hợp lệ.")
     if pct(lost, len(csi) + lost) > 1 or drops:
-        rep.warn(f"Mất {lost} dòng theo seq, {drops} bản ghi mất do queue đầy trên #2. Cân nhắc gửi dạng nhị phân.")
+        rep.warn(f"{b}: mất {lost} dòng theo seq, {drops} bản ghi mất do queue đầy. Cân nhắc gửi dạng nhị phân.")
     else:
-        rep.ok("Gần như không mất dòng.")
+        rep.ok(f"{b}: gần như không mất dòng.")
     if resets:
-        rep.warn(f"Board #2 khởi động lại {resets} lần trong buổi thu (mất nguồn, lỗi firmware?).")
+        rep.warn(f"{b} khởi động lại {resets} lần trong buổi thu (mất nguồn, lỗi firmware?).")
     if n_win and valid / n_win < 0.95:
-        rep.warn(f"Chỉ {pct(valid, n_win):.0f}% window hợp lệ.")
+        rep.warn(f"{b}: chỉ {pct(valid, n_win):.0f}% window hợp lệ.")
     if len(macs) > 1:
-        rep.bad(f"CSI đến từ {len(macs)} MAC khác nhau: firmware #2 chưa lọc theo MAC của #1.")
-    if set(lens) != {128}:
-        rep.warn(f"Độ dài CSI {sorted(lens)} khác 128 byte dự kiến: kiểm tra cấu hình wifi_csi_config_t.")
+        rep.bad(f"{b}: CSI đến từ {len(macs)} MAC khác nhau: firmware chưa lọc theo MAC của TX.")
+    if len(lens) > 1 or not set(lens) <= {104, 128}:
+        rep.warn(f"{b}: độ dài CSI {sorted(lens)} – dự kiến 104 hoặc 128 byte và không đổi: kiểm tra wifi_csi_config_t.")
     if len(modes) > 1:
-        rep.warn(f"Trộn nhiều sig_mode {dict(modes)}: các mẫu có thể khác nhau về số sóng mang con.")
+        rep.warn(f"{b}: trộn nhiều sig_mode {dict(modes)}: các mẫu có thể khác nhau về số sóng mang con.")
     if big:
-        rep.warn(f"Có {len(big)} khoảng trống > 0,5 giây (mất kết nối Wi-Fi hoặc board khởi động lại?).")
+        rep.warn(f"{b}: có {len(big)} khoảng trống > 0,5 giây (nhiễu chen ngang, mất kết nối hoặc board khởi động lại?).")
 
 
 def check_probe(rep, probe, stat, t0, t1):
-    rep.h("2. Probe Request (ESP32-C3 #3)")
+    rep.h("2. Probe Request (sniffer)")
     if not probe:
         rep.p("Không có dòng PRB nào.")
         if any(r["board"] == "SNF" for r in stat):
-            rep.warn("Sniffer #3 có chạy (có dòng STAT) nhưng không bắt được Probe Request nào.")
+            rep.warn("Sniffer có chạy (có dòng STAT) nhưng không bắt được Probe Request nào.")
         else:
-            rep.warn("Không có dữ liệu từ sniffer #3 (chưa nối hoặc chưa có firmware).")
+            rep.warn("Không có dữ liệu từ sniffer (chưa nối hoặc chưa có firmware).")
         return
     minutes = max(1e-9, (t1 - t0) / 60)
     excl = [r for r in probe if r["excluded"] == "1"]
@@ -252,10 +275,25 @@ def check_labels(rep, labels, args, t0, t1):
             people += int(r["value"])
             neg = neg or people < 0
     notes = [r for r in labels if r["event"] == "NOTE"]
+    acts = sorted((float(r["host_time"]), r["value"]) for r in labels if r["event"] == "ACTION")
+    rates = [r for r in labels if r["event"] == "RATE"]
+    if acts:
+        c = Counter(v for _, v in acts)
+        rep.p("Động tác: " + ", ".join(f"{a} {c.get(a, 0)}" for a in ACTIONS))
+    if rates:
+        rep.p("Nhịp thở đáp án (RATE): " + ", ".join(f"{fmt_dur(float(r['host_time']) - t0)} → {r['value']}"
+                                                    for r in rates[:12]) + (" …" if len(rates) > 12 else ""))
+    downs = [t for t, v in ((float(r["host_time"]), r["value"]) for r in labels if r["event"] == "STATE") if v == "DOWN"]
+    no_down = [t for t, v in acts if v == "FALL" and not any(0 <= d - t <= 10 for d in downs)]
+    unknown = sorted({v for _, v in acts} - set(ACTIONS))
     rep.p(f"Sự kiện đếm người: {sum(r['event'] == 'COUNT' for r in labels)}, số người lúc kết thúc: {people}")
     for r in notes:
         rep.p(f"Ghi chú lúc {fmt_dur(float(r['host_time']) - t0)}: {r['value']}")
 
+    if no_down:
+        rep.warn(f"{len(no_down)} lần FALL không có DOWN trong 10 giây sau đó (quên bấm D?).")
+    if unknown:
+        rep.bad(f"Động tác lạ trong labels.csv: {unknown}")
     if first - t0 > 60:
         rep.warn(f"Bấm nhãn đầu tiên sau {fmt_dur(first - t0)}: đoạn đầu bị bỏ.")
     short = [(v, b - a) for v, a, b in segs if v not in SHORT_OK and b - a < 2 * args.window]
@@ -309,7 +347,9 @@ def main():
     rep.p(f"Thư mục: {d}")
     rep.p(f"Thời lượng: {fmt_dur(t1 - t0)}   phòng: {meta.get('room') or '-'}   kênh: {meta.get('channel') or '-'}   "
           f"TX-RX: {meta.get('tx_rx_distance_m') or '-'} m   firmware: {meta.get('fw') or '-'}")
-    if meta.get("simulator", {}).get("engine") == "sionna-rt":
+    if meta.get("simulator", {}).get("engine") == "3d":
+        rep.warn("Dữ liệu MÔ PHỎNG 3D (mo_phong.py): dùng để thử thuật toán, không thay cho dữ liệu thật khi đánh giá.")
+    elif meta.get("simulator", {}).get("engine") == "sionna-rt":
         rep.warn("Dữ liệu MÔ PHỎNG Sionna RT: dùng để thử thuật toán, không thay cho dữ liệu thật khi đánh giá.")
     elif meta.get("simulated"):
         rep.warn("Dữ liệu GIẢ LẬP (--simulate): không dùng để train.")

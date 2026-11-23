@@ -43,7 +43,7 @@ from logger import FILES, SPEC_VERSION  # noqa: E402
 from nhan import PRESENCE, STATES  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-LABELS = set(STATES)
+LABELS = set(STATES) | {"FALL"}                # bản cũ theo v0.2: FALL vẫn là một trạng thái
 DEFAULT_PLAN = "EMPTY:30,ACTIVE:60,STILL:45,ACTIVE:30,FALL:1.5,DOWN:45,BREATH_ABN:30,EMPTY:20,NEIGHBOR:40,EMPTY:20"
 
 # hình học (m): phòng demo x∈[-3,2], y∈[-2,2]; tường ngăn x=2.075; phòng bên x∈[2.15,5]
@@ -155,7 +155,7 @@ def build_frames(plan, rt_hz, rng, guests=0):
             p[:, :2], p[:, 2], p[:, 3:] = walker(rng, NEIGHBOR_ROOM, n, dt), STAND_H / 2, (0.0, 0.0, 1.0)
         if name == "EMPTY" or name == "NEIGHBOR":
             last, lying = room_xy(), None
-        home = PRESENCE[name] == 1
+        home = PRESENCE.get(name, 1) == 1
         for g in range(guests):                                                 # khách chỉ có mặt khi chủ nhà ở nhà
             if home:
                 xy = walker(rng, ROOM, n, dt, guest_last[g])
