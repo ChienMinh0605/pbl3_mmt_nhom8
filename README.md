@@ -8,7 +8,8 @@
 
 - **Người:** 1 ESP32-C3 (TX) phát ESP-NOW broadcast, 2 ESP32-S3 (RX1, RX2) thu CSI, cắm USB vào laptop → có người
   → đếm người → động tác / ngã / nhịp thở.
-- **Thiết bị:** ESP32-C3 sniffer bắt Probe Request → máy trạng thái Sherlock. Hướng ghép với nhánh người đang bàn:
+- **Thiết bị:** ESP32-C3 sniffer nghe tiêu đề khung Wi‑Fi trên mạng nhà → thiết bị trong nhà có đang được dùng, kênh
+  CSI có sạch không, trong nhà còn ai → giảm báo động giả và chọn người nhận cảnh báo. Đề xuất (chờ chốt):
   [`DE_XUAT_NHANH_THIET_BI.md`](DE_XUAT_NHANH_THIET_BI.md).
 
 ## Cấu trúc
@@ -17,7 +18,7 @@
 |---|---|---|
 | `Dac_ta_dinh_dang_du_lieu.md` | Đặc tả định dạng dữ liệu giữa các phần (v0.3). **Đọc trước khi code.** | Cả nhóm |
 | `KE_HOACH_NHANH_NGUOI.md` | Bài toán, phần cứng, kiến trúc, nhãn, dữ liệu, đánh giá, lộ trình của nhánh người | Chiến |
-| `DE_XUAT_NHANH_THIET_BI.md` | Đề xuất nhánh thiết bị và cách ghép với nhánh người – **chưa chốt** | Chiến, Phúc |
+| `DE_XUAT_NHANH_THIET_BI.md` | Đề xuất nhánh thiết bị và cách ghép với nhánh người – **chờ chốt** | Chiến, Phúc |
 | `firmware/` | Firmware TX, RX, sniffer | Tiên, Phúc |
 | `laptop/` | Logger, kiểm tra buổi thu, train, dashboard, mô phỏng (xem `laptop/README.md`) | Chiến |
 | `tai_lieu/`, `luu_tru/` | Bài báo tham khảo, tài liệu theo hướng cũ – chỉ để trên máy, **không đưa lên Git** | |
