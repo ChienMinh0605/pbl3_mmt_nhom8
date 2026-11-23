@@ -1,7 +1,6 @@
 # Kế hoạch nhánh người – Giám sát an toàn người ở một mình bằng Wi‑Fi CSI
 
-**Cập nhật:** 22/11/2026 · **Hạn báo cáo:** 26/12/2026
-**Phụ trách:** Chiến (laptop, mô hình, dashboard), Tiên (firmware TX/RX, tiền xử lý)
+**Cập nhật:** 23/11/2026 · **Hạn báo cáo:** 26/12/2026
 **Đặc tả dữ liệu đi kèm:** `Dac_ta_dinh_dang_du_lieu.md` v0.3
 
 ---
@@ -33,7 +32,7 @@ Nhóm có 4 ESP32‑C3 và 2 ESP32‑S3.
 |---|---|---|
 | TX | 1 C3 | Đặt ở góc phòng, phát **ESP‑NOW broadcast** khoảng 100 gói/s |
 | RX1, RX2 | 2 S3 | Đặt ở hai cạnh khu demo, tạo **2 đường truyền cắt qua chỗ người hoạt động**. Cùng thu CSI của cùng một gói |
-| SNF | 1 C3 | Nhánh thiết bị (Phúc) – **tạm gác ghép** vào nhánh người |
+| SNF | 1 C3 | Nhánh thiết bị – **tạm gác ghép** vào nhánh người |
 | Dự phòng | 2 C3 | Thay khi board hỏng; một con có thể làm RX3 nếu đếm người kém |
 
 - **Vì sao ESP‑NOW broadcast** thay cho SoftAP + ping: firmware đơn giản hơn (sửa từ ví dụ `csi_send`/`csi_recv`
@@ -152,16 +151,16 @@ ghép sai cặp số phức (`x[2i]` với `x[2i-1]`), **không dùng lại**.
 | **Nếu kịp** | Cảnh báo bất động quá lâu (ví dụ ban ngày ngồi yên > 2 giờ) |
 | **Cắt** | Phân khu / vị trí; động tác, ngã, nhịp thở khi ≥ 2 người; ghép Sherlock (tạm gác) |
 
-## 8. Lộ trình và phân công
+## 8. Lộ trình
 
-| Thời gian | Việc | Người |
-|---|---|---|
-| 23–29/11 | Firmware TX/RX từ esp‑csi (ESP‑NOW, dòng `CSI` theo đặc tả v0.3); **1 TX + 1 RX chạy thông**; buổi kiểm thử phần cứng cuối tuần | Tiên |
-| 23–29/11 | `nhan.py`, `logger.py` theo v0.3 (nhiều RX, nhãn động tác, `R`); đọc WiFall/WiCount; thử bộ phân loại động tác trên WiFall | Chiến |
-| 30/11–06/12 | Thêm RX2; `features.py` v0.3 (window 6 s và window động tác 3 s); thu các buổi 1 người | Tiên + Chiến + cả nhóm thu |
-| 07–13/12 | Thu buổi 2–3 người; train tầng 0, đếm người, động tác/ngã; nhịp thở | Chiến + Tiên |
-| 14–20/12 | Dashboard theo chế độ (1 người / nhiều người, cảnh báo ngã, nhịp thở); đánh giá; thu bổ sung nếu thiếu | Chiến |
-| 21–26/12 | Báo cáo, slide, chạy thử demo | Cả nhóm |
+| Thời gian | Việc |
+|---|---|
+| 23–29/11 | Firmware TX/RX từ esp‑csi (ESP‑NOW, dòng `CSI` theo đặc tả v0.3); **1 TX + 1 RX chạy thông**; buổi kiểm thử phần cứng cuối tuần |
+| 23–29/11 | `nhan.py`, `logger.py` theo v0.3 (nhiều RX, nhãn động tác, `R`); đọc WiFall/WiCount; thử bộ phân loại động tác trên WiFall |
+| 30/11–06/12 | Thêm RX2; `features.py` v0.3 (window 6 s và window động tác 3 s); thu các buổi 1 người |
+| 07–13/12 | Thu buổi 2–3 người; train tầng 0, đếm người, động tác/ngã; nhịp thở |
+| 14–20/12 | Dashboard theo chế độ (1 người / nhiều người, cảnh báo ngã, nhịp thở); đánh giá; thu bổ sung nếu thiếu |
+| 21–26/12 | Báo cáo, slide, chạy thử demo |
 
 Firmware chạy thông (tuần đầu) chặn mọi việc phía sau; phần laptop làm song song bằng `logger.py --simulate` và WiFall.
 
