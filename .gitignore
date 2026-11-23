@@ -6,10 +6,11 @@ models/
 __pycache__/
 *.pyc
 
-# bài báo tham khảo (bản quyền) và tài liệu Word nội bộ
+# bài báo tham khảo (bản quyền), tài liệu Word nội bộ, tài liệu hướng cũ
+luu_tru/
+tai_lieu/
 *.pdf
 *.docx
-!luu_tru/WiFi_Sensing_Tom_tat.docx
 ~$*
 .~lock*
 
