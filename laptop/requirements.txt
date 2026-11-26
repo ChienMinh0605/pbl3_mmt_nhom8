@@ -1,6 +1,7 @@
 pyserial>=3.5
 numpy
 pandas
+scipy
 scikit-learn
 joblib
 # XGBoost: bản chỉ dùng CPU, nhẹ hơn nhiều so với gói "xgboost" đầy đủ

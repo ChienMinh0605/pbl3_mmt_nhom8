@@ -1,0 +1,55 @@
+# CI: test Python ở laptop/ và build firmware TX/RX. Bản build trên main được giữ làm artifact (tải .bin về nạp).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: laptop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: laptop/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Tự kiểm tra đặc trưng và luật train
+        run: |
+          python -c "import features as F; F._check_motion_features(); F._check_compact6()"
+          python -c "import train; train._check_rules()"
+      - run: python test_canh_bao.py
+      - run: python test_mo_phong.py
+      - name: Logger với dữ liệu giả
+        run: python logger.py --simulate --tag ci --duration 5 --data-dir "$RUNNER_TEMP/data" < /dev/null
+
+  firmware:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v6.1
+    strategy:
+      matrix:
+        project: [tx, rx]   # thu_mo_hinh cần .bin do xuat_board.py tạo từ dữ liệu mô phỏng (không có trong repo)
+    steps:
+      - uses: actions/checkout@v4
+      - name: idf.py build
+        shell: bash
+        working-directory: firmware/${{ matrix.project }}
+        run: |
+          . "$IDF_PATH/export.sh" > /dev/null
+          idf.py build
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: firmware-${{ matrix.project }}
+          path: |
+            firmware/${{ matrix.project }}/build/bootloader/bootloader.bin
+            firmware/${{ matrix.project }}/build/partition_table/partition-table.bin
+            firmware/${{ matrix.project }}/build/${{ matrix.project }}.bin
+            firmware/${{ matrix.project }}/build/flash_args
