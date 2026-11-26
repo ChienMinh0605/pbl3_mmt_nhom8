@@ -1,0 +1,13 @@
+menu "PBL3 CSI"
+    config CSI_KENH
+        int "Kenh Wi-Fi 2,4 GHz (TX va moi RX phai giong nhau)"
+        range 1 13
+        default 6
+    config CSI_MAC_TX
+        string "MAC phat ESP-NOW cua TX (aa:bb:cc:dd:ee:ff, bit 1 cua byte dau = 1)"
+        default "1a:00:00:00:00:00"
+    config CSI_TAN_SO
+        int "So goi ESP-NOW moi giay"
+        range 10 1000
+        default 100
+endmenu
