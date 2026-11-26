@@ -354,7 +354,7 @@ Window **3 giây, trượt 0,5 giây**, chỉ dùng cho chế độ 1 người. 
 |---|---|
 | `action` | `FALL`, `SIT_DOWN`, `STAND_UP`, `LIE_DOWN`, `PICK_UP`, hoặc `NONE` |
 | `state` | Nhãn `STATE` tại giữa window (để lấy mẫu `NONE` từ cả đoạn `ACTIVE` lẫn `STILL`) |
-| Đặc trưng | Tên cột có tiền tố board như trên. Hiện `features.py` dùng 4 đặc trưng độ phân tán (như window 6 s) + 2 đặc trưng hình dạng mỗi RX: `<board>_shape_peak` (biến thiên lớn nhất trong 0,1 s của biên độ trung bình), `<board>_shape_ratio` (độ dao động nửa sau / nửa đầu window) |
+| Đặc trưng | Tên cột có tiền tố board như trên. Hiện `features.py` dùng 4 đặc trưng độ phân tán (như window 6 s) + 2 đặc trưng hình dạng mỗi RX: `<board>_shape_peak` (biến thiên lớn nhất trong 0,1 s của biên độ trung bình), `<board>_shape_ratio` (độ dao động nửa sau / nửa đầu window), và 13 đặc trưng chuyển động trên thành phần chính PC1 của các sóng mang con: `<board>_shape_{pc1,cvmed,cvmax,b0..b4,slope,pos,after,before,busy}` (ý nghĩa: docstring `features.py`) |
 
 Gán nhãn `action`:
 - Window trùng **≥ 2 giây** với đoạn của một động tác (mục 4.4) → nhãn của động tác đó.

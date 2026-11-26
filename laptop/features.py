@@ -15,7 +15,13 @@ RX nào) vẫn ghi với valid = 0.
 Mục 5.2 – window 3 s trượt 0,5 s, chỉ khi có đúng 1 người: action = động tác nếu trùng ≥ 2 s với đoạn động tác
 [t − 0,5; t + 2,5] (t = lúc bấm), NONE nếu không trùng động tác nào, còn lại bỏ. Thêm 2 đặc trưng hình dạng cho mỗi RX:
 <board>_shape_peak (biến thiên lớn nhất trong 0,1 s của biên độ trung bình) và <board>_shape_ratio (độ dao động nửa sau /
-nửa đầu window – ngã: mạnh rồi yên hẳn).
+nửa đầu window – ngã: mạnh rồi yên hẳn), và các đặc trưng chuyển động trên thành phần chính PC1 (motion_features):
+<board>_shape_pc1 (tỉ phần PC1), _cvmed/_cvmax (độ dao động tương đối các sóng mang con), _b0.._b4 (log năng lượng
+theo dải tần BANDS), _slope/_pos (độ lớn, vị trí cú biến đổi lớn nhất), _after/_before (độ yên sau / trước nó), _busy.
+Bộ gọn bền với gói hỏng (25 cột mỗi board, bộ khuyên dùng cho board, xem robust_features), tính trên các gói còn lại
+sau khi bỏ gói hỏng: <board>_mon_* = motion_features + tail, head, lvl, width trên biên độ đã chia cho biên độ trung
+bình của chính gói đó (bỏ dao động khuếch đại AGC chung mọi sóng mang con); <board>_mot_b0.._b4, _peak, _ratio = năng
+lượng 5 dải và peak, ratio trên biên độ chưa chia; <board>_mot_bad = tỉ lệ gói bị bỏ.
 """
 import argparse
 import json
@@ -82,8 +88,183 @@ def spread_stats(x, axis=0):
             "range": np.nanmax(x, axis=axis) - np.nanmin(x, axis=axis), "iqr": q75 - q25}
 
 
-def window_features(amps, rssi, prefix="", kept=None, shape=False):
-    """amps: (số mẫu, số sóng mang con), rssi: (số mẫu,). Trả về {tên cột: giá trị} của một RX."""
+BANDS = ((0.3, 1.0), (1.0, 3.0), (3.0, 8.0), (8.0, 20.0), (20.0, 40.0))   # Hz: ~ tốc độ đổi độ dài đường truyền
+
+
+def motion_features(a, rate=100.0, extra=False):
+    """Đặc trưng chuyển động của window động tác trên thành phần chính PC1 của biên độ tương đối các sóng mang con
+    (mọi sóng mang con cùng đổi theo một chuyển động lớn của người; PC1 gom lại, bớt nhiễu riêng từng sóng mang con).
+    a: (số mẫu, số sóng mang con) đã chọn sóng mang con. Trả về {tên: giá trị} chưa có tiền tố board.
+    extra: thêm 4 đặc trưng tách ngã khỏi đi lại / nằm xuống: tail, head (độ dao động PC1 trong 1 s cuối / đầu so với cả
+    window – ngã xong thì yên), lvl (PC1 lệch hẳn giữa 0,5 s cuối và đầu – tư thế đổi), width (số giây quanh cú lớn nhất
+    mà độ đổi còn ≥ nửa đỉnh – ngã ngắn, nằm xuống dài, đi lại thì liền nhau)."""
+    a = a[:, np.all(np.isfinite(a), axis=0)]
+    rel = a / np.maximum(a.mean(axis=0), 1e-6) - 1             # biên độ tương đối: không phụ thuộc mức tín hiệu
+    cv = rel.std(axis=0)
+    rel = rel - rel.mean(axis=0)
+    # PC1 bằng lặp lũy thừa trên ma trận hiệp phương sai K × K: svd/eigh của LAPACK chậm hơn ~30 lần khi máy bận
+    c = rel.T @ rel
+    v = c[:, np.argmax(np.diag(c))].copy()
+    for _ in range(30):
+        v = c @ v
+        v /= max(np.linalg.norm(v), 1e-12)
+    s = rel @ v / np.sqrt(rel.shape[1])                         # PC1, cùng thang với biên độ tương đối
+    out = {"shape_pc1": float(v @ c @ v / max(np.trace(c), 1e-12)),   # chuyển động lớn → PC1 chiếm phần lớn
+           "shape_cvmed": float(np.median(cv)), "shape_cvmax": float(cv.max())}
+    p = np.abs(np.fft.rfft((s - s.mean()) * np.hanning(len(s)))) ** 2 / len(s)
+    f = np.fft.rfftfreq(len(s), 1 / rate)
+    for i, (lo, hi) in enumerate(BANDS):
+        out[f"shape_b{i}"] = float(np.log10(p[(f >= lo) & (f < hi)].sum() + 1e-9))
+    # cú biến đổi lớn nhất: độ đổi trong 0,2 s của PC1 đã làm trơn 0,1 s; vị trí 0–1 trong window
+    w = max(int(round(0.1 * rate)), 1)
+    sm = np.convolve(s, np.ones(w) / w, "valid")
+    d = np.abs(sm[2 * w:] - sm[:-2 * w]) if len(sm) > 2 * w else np.zeros(1)
+    k = int(np.argmax(d))
+    top = max(d[k], 1e-12)
+    # độ yên trước / sau cú biến đổi (ngã: mạnh rồi yên hẳn) và phần thời gian có chuyển động, so với cú lớn nhất
+    after, before = d[k + 3 * w:], d[:max(k - 3 * w, 0)]
+    out.update(shape_slope=float(d[k]), shape_pos=float((k + 1.5 * w) / len(s)),
+               shape_after=float(after.mean() / top) if len(after) else 1.0,
+               shape_before=float(before.mean() / top) if len(before) else 1.0,
+               shape_busy=float(np.mean(d > 0.3 * top)))
+    if extra:
+        q, h, sd = max(int(rate), 2), max(int(0.5 * rate), 2), max(s.std(), 1e-9)
+        hi = d > 0.5 * top
+        lo_, hi_ = k, k                                         # đoạn liền quanh k còn ≥ nửa đỉnh
+        while lo_ > 0 and hi[lo_ - 1]:
+            lo_ -= 1
+        while hi_ + 1 < len(d) and hi[hi_ + 1]:
+            hi_ += 1
+        out.update(shape_tail=float(s[-q:].std() / sd), shape_head=float(s[:q].std() / sd),
+                   shape_lvl=float(abs(s[-h:].mean() - s[:h].mean()) / sd), shape_width=float((hi_ - lo_ + 1) / rate))
+    return out
+
+
+def peak_ratio(a):
+    """shape_peak, shape_ratio trên biên độ trung bình các sóng mang con (xem docstring đầu file)."""
+    m = np.nanmean(a, axis=1)
+    m = m / max(np.nanmean(m), 1e-9)
+    sm = np.convolve(m, np.ones(10) / 10, "valid") if len(m) >= 20 else m
+    h = len(m) // 2
+    return {"shape_peak": float(np.nanmax(np.abs(sm[10:] - sm[:-10]))) if len(sm) > 10 else 0.0,
+            "shape_ratio": float(np.nanstd(m[h:]) / max(np.nanstd(m[:h]), 1e-9)) if h > 1 else 1.0}
+
+
+BAD_LOG = 0.5     # gói hỏng: biên độ trung bình lệch > e^0,5 ≈ 1,65 lần so với trung vị window (gói hỏng ×2–4)
+
+
+def good_packets(a):
+    """Mặt nạ gói CSI không hỏng: |log(biên độ TB gói / trung vị các gói)| < BAD_LOG. Dùng trung vị vì vài gói hỏng
+    (khung Wi-Fi khác chồng lên) không kéo lệch nó; người cử động chỉ đổi biên độ TB vài % vì AGC bù ~90 %.
+    Bỏ > nửa số gói thì coi như không lọc được (trả về toàn True)."""
+    m = np.nanmean(a, axis=1)
+    g = np.abs(np.log(np.maximum(m, 1e-9) / max(np.nanmedian(m), 1e-9))) < BAD_LOG
+    return g if g.sum() >= 0.5 * len(g) else np.ones(len(g), bool)
+
+
+def robust_features(a, rate=100.0):
+    """Bộ gọn cho board (25 cột, chưa có tiền tố): bỏ gói hỏng rồi tính motion_features(extra) trên biên độ chia cho
+    trung bình của từng gói (mon_, 17 cột), và năng lượng 5 dải + peak, ratio trên biên độ chưa chia (mot_, 7 cột) +
+    mot_bad. mon_ chỉ thấy sự đổi hình dạng phổ theo sóng mang con, bền với AGC; mot_ thêm sự đổi chung mọi sóng mang con
+    (người che sóng). Giữ ít cột mot_ vì trên WiFall (CSI thật) thêm các cột mot_ khác làm F1 tụt (dao động AGC thật
+    lấn tín hiệu chung), còn trên mô phỏng các dải mot_b* giúp nhiều nhất."""
+    g = good_packets(a)
+    a = a[g][:, np.all(np.isfinite(a[g]), axis=0)]
+    out = {"mot_bad": float(1 - g.mean())}
+    m = {**motion_features(a, rate), **peak_ratio(a)}
+    out.update({"mot_" + k[6:]: m[k] for k in [f"shape_b{i}" for i in range(len(BANDS))] + ["shape_peak", "shape_ratio"]})
+    n = a / np.maximum(a.mean(axis=1, keepdims=True), 1e-9)   # peak/ratio của n luôn ~ hằng số nên không tính
+    out.update({"mon_" + k[6:]: v for k, v in motion_features(n, rate, True).items()})
+    return out
+
+
+def _check_motion_features():
+    """Tự kiểm tra: cú đổi mạnh ở giữa rồi yên → slope lớn, vị trí ~0,5, after nhỏ; nhiễu trắng → after ~ before."""
+    rng = np.random.default_rng(0)
+    t = np.arange(300) / 100
+    step = np.where(t > 1.5, 0.3, 0.0)[:, None] * rng.uniform(0.5, 1.5, 52)
+    f = motion_features(10 + 10 * step + 0.05 * rng.standard_normal((300, 52)))
+    assert f["shape_slope"] > 0.1 and abs(f["shape_pos"] - 0.5) < 0.05 and f["shape_after"] < 0.3, f
+    g = motion_features(10 + 0.05 * rng.standard_normal((300, 52)))
+    assert g["shape_slope"] < f["shape_slope"] / 5 and g["shape_after"] > 0.3, g
+    e = motion_features(10 + 10 * step + 0.05 * rng.standard_normal((300, 52)), extra=True)
+    assert e["shape_tail"] < 0.2 and e["shape_lvl"] > 1.5 and e["shape_width"] < 0.5, e
+    # người yên + 3 % gói hỏng (×3): lọc bỏ đúng các gói đó, năng lượng dải cao mot_b4 không vọt lên như shape_b4
+    x = 10 * rng.uniform(0.5, 1.5, 52) * (1 + 0.05 * rng.standard_normal((300, 52)))
+    bad = rng.random(300) < 0.03
+    x[bad] *= 3
+    assert np.array_equal(~good_packets(x), bad)
+    r, s = robust_features(x), motion_features(x)
+    assert abs(r["mot_bad"] - bad.mean()) < 1e-9 and r["mot_b4"] < s["shape_b4"] - 1 and len(r) == 25, (r, s)
+
+
+def breath_band(x, rate=100.0):
+    """Dải thở 0,1–0,6 Hz của tín hiệu x: hạ mẫu còn 10 Hz (TB mỗi 0,1 s), bỏ TB, công suất các bin DFT trong dải.
+    6 s → 60 điểm, chỉ 3 bin (1/6, 2/6, 3/6 Hz): trên board tính DFT 3 bin bằng bảng cos/sin sẵn, không cần FFT.
+    → (log10 công suất dải, tỉ phần phương sai nằm trong dải 0–1). Người ngồi yên vẫn thở; phòng trống thì không."""
+    h = max(int(round(rate / 10)), 1)
+    n = len(x) // h
+    y = np.asarray(x[:n * h], float).reshape(n, h).mean(axis=1)
+    y = y - y.mean()
+    f = np.fft.rfftfreq(n, h / rate)
+    b = float((np.abs(np.fft.rfft(y)[(f >= 0.1) & (f <= 0.6) & (f > 0)]) ** 2).sum() / max(n, 1))
+    return float(np.log10(b + 1e-12)), float(min(2 * b / max(float((y ** 2).sum()), 1e-12), 1.0))   # Parseval
+
+
+def compact6_features(a, rssi, rate=100.0):
+    """Bộ gọn window 6 s cho board (19 cột, chưa có tiền tố): vẫn 4 đặc trưng độ phân tán của bài báo 2 (var, mad,
+    range, iqr) nhưng trên 4 tín hiệu đã gom thay cho RSSI + 52 sóng mang con: rssi, lvl (biên độ TB các sóng mang con
+    của từng gói / TB cả window − 1: người che sóng, không phụ thuộc mức tín hiệu), pc1, pc2 (2 thành phần chính của
+    biên độ tương đối các sóng mang con: chuyển động làm mọi sóng mang con đổi cùng nhau) → 16 cột; thêm br_pc1, brf_pc1
+    (dải thở của pc1, tách "người ngồi yên" khỏi "phòng trống", kế hoạch mục 3) và bad_pkt (tỉ lệ gói hỏng bị bỏ).
+    Trên board: 4 dãy × 600 số cần sắp xếp cho IQR thay vì 53, PC bằng lặp lũy thừa như motion_features."""
+    g = good_packets(a)
+    a, rssi = a[g], np.asarray(rssi, float)[g]
+    # shortcut: bỏ gói hỏng/mất làm co trục thời gian vài % (lệch nhẹ tần số dải thở), cần chính xác hơn thì dùng lưới
+    # thời gian như danh_gia_canh_bao.luoi
+    a = a[:, np.all(np.isfinite(a), axis=0)]
+    m = a.mean(axis=1)
+    rel = a / np.maximum(a.mean(axis=0), 1e-6) - 1
+    rel = rel - rel.mean(axis=0)
+    c, pcs = rel.T @ rel, []
+    for _ in range(2):                                          # PC1 rồi PC2 (trừ PC1 khỏi ma trận hiệp phương sai)
+        v = c[:, np.argmax(np.diag(c))].copy()
+        for _ in range(30):
+            v = c @ v
+            v /= max(np.linalg.norm(v), 1e-12)
+        pcs.append(rel @ v / np.sqrt(rel.shape[1]))
+        c = c - (v @ c @ v) * np.outer(v, v)
+    sig = {"rssi": rssi, "lvl": m / max(m.mean(), 1e-9) - 1, "pc1": pcs[0], "pc2": pcs[1]}
+    out = {f"{s}_{k}": float(v) for k, x in sig.items() for s, v in spread_stats(x).items()}
+    out["br_pc1"], out["brf_pc1"] = breath_band(pcs[0], rate)
+    out["bad_pkt"] = float(1 - g.mean())
+    return out
+
+
+def _check_compact6():
+    """Tự kiểm tra bộ gọn 6 s: thở 0,25 Hz → tỉ phần dải thở cao, nhiễu trắng → thấp; đổi mức khuếch đại chung không đổi
+    cột CSI nào (chỉ RSSI); gói hỏng được đếm và bỏ."""
+    rng = np.random.default_rng(1)
+    t = np.arange(600) / 100
+    w = rng.uniform(0.5, 1.5, 52)
+    tho = 10 * w * (1 + 0.02 * np.sin(2 * np.pi * 0.25 * t)[:, None] * rng.uniform(-1, 1, 52)
+                    + 0.002 * rng.standard_normal((600, 52)))
+    yen = 10 * w * (1 + 0.002 * rng.standard_normal((600, 52)))
+    rs = -40 + rng.standard_normal(600)
+    f, e = compact6_features(tho, rs), compact6_features(yen, rs)
+    assert len(f) == 19 and f["brf_pc1"] > 0.8 and e["brf_pc1"] < 0.3 and f["br_pc1"] > e["br_pc1"] + 2, (f, e)
+    k = compact6_features(3 * tho, rs)
+    assert all(abs(k[c] - f[c]) <= 1e-6 * max(abs(f[c]), 1e-3) for c in f), (k, f)
+    x = yen.copy()
+    bad = rng.random(600) < 0.03
+    x[bad] *= 3
+    assert abs(compact6_features(x, rs)["bad_pkt"] - bad.mean()) < 1e-9
+
+
+def window_features(amps, rssi, prefix="", kept=None, shape=False, rate=100.0):
+    """amps: (số mẫu, số sóng mang con), rssi: (số mẫu,). Trả về {tên cột: giá trị} của một RX.
+    rate: số mẫu/giây (cho dải tần): mặc định 100 như đặc tả, WiFall ~84. Window 6 s (shape=False) có thêm 19 cột
+    <board>_g6_* (compact6_features)."""
     amps = np.asarray(amps, dtype=float)
     kept = kept_subcarriers(amps.shape[1]) if kept is None else kept
     out = {}
@@ -95,12 +276,11 @@ def window_features(amps, rssi, prefix="", kept=None, shape=False):
         for k, v in zip(kept, c[s]):
             out[f"{prefix}csi_{s}_{k:02d}"] = float(v)
     if shape:
-        m = np.nanmean(amps[:, kept], axis=1)
-        m = m / max(np.nanmean(m), 1e-9)
-        sm = np.convolve(m, np.ones(10) / 10, "valid") if len(m) >= 20 else m
-        out[f"{prefix}shape_peak"] = float(np.nanmax(np.abs(sm[10:] - sm[:-10]))) if len(sm) > 10 else 0.0
-        h = len(m) // 2
-        out[f"{prefix}shape_ratio"] = float(np.nanstd(m[h:]) / max(np.nanstd(m[:h]), 1e-9)) if h > 1 else 1.0
+        out.update({prefix + k: v for k, v in peak_ratio(amps[:, kept]).items()})
+        out.update({prefix + k: v for k, v in motion_features(amps[:, kept], rate).items()})
+        out.update({prefix + k: v for k, v in robust_features(amps[:, kept], rate).items()})
+    else:
+        out.update({prefix + "g6_" + k: v for k, v in compact6_features(amps[:, kept], rssi, rate).items()})
     return out
 
 
@@ -206,7 +386,7 @@ def action_windows(d, window=3.0, step=0.5, rate=100.0, valid_ratio=0.7):
             row[p + "n_samples"] = j - i
             ok &= (j - i) >= valid_ratio * rate * window
             if j - i >= 20:
-                row.update(window_features(amp[i:j], rssi[i:j], prefix=p, shape=True))
+                row.update(window_features(amp[i:j], rssi[i:j], prefix=p, shape=True, rate=rate))
         row.update({"valid": int(ok), "n_people": 1, "action": action, "state": state})
         rows.append(row)
     return meta, pd.DataFrame(rows)
@@ -219,6 +399,8 @@ def main():
     ap.add_argument("--out", help="thư mục ghi (mặc định ../data/features hoặc ../data/features_action)")
     ap.add_argument("--rate", type=float, default=100)
     args = ap.parse_args()
+    _check_motion_features()
+    _check_compact6()
     dirs = [Path(s) for s in args.sessions] or sorted(p for p in (ROOT / "data" / "raw").glob("*") if p.is_dir())
     dirs = [d for d in dirs if (d / "csi.csv").exists() and (d / "meta.json").exists()]
     if not dirs:
