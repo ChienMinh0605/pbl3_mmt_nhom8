@@ -279,6 +279,10 @@ class SerialSource(threading.Thread):
             try:
                 with serial.Serial(self.port, self.baud, timeout=0.5) as s:
                     print(f"\n[{self.name_}] đã mở {self.port}")
+                    # Bỏ 0,5 s đầu: bộ đệm USB của board còn dòng cũ ghi lúc chưa ai đọc (seq nhảy, bị tính là mất)
+                    het = time.time() + 0.5
+                    while time.time() < het and not self.stop.is_set():
+                        s.read(s.in_waiting or 1)
                     buf = b""
                     while not self.stop.is_set():
                         buf += s.read(s.in_waiting or 1)
