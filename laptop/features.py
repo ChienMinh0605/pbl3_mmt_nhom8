@@ -37,7 +37,7 @@ from nhan import ACTION_WINDOW, ACTIONS, ACTIVITY, PRESENCE  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 SPEC_VERSION = "0.3"
 STATS = ("var", "mad", "range", "iqr")
-NULL_64 = [0, 1] + list(range(27, 38))                     # len 128 (64 sóng mang con LLTF): bỏ sóng mang con rỗng
+NULL_64 = [0] + list(range(27, 38))                        # len 128 (64 sóng mang con LLTF): DC + dải bảo vệ rỗng → còn 52 như len 104 (đo trên S3 thật 26/11)
 BREATHING = ("STILL", "DOWN", "BREATH_ABN")
 
 

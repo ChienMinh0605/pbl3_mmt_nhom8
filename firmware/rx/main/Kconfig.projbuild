@@ -1,0 +1,12 @@
+menu "PBL3 CSI"
+    config CSI_TEN_BOARD
+        string "Ten board in trong BOOT/STAT (RX1, RX2, RX3)"
+        default "RX1"
+    config CSI_KENH
+        int "Kenh Wi-Fi 2,4 GHz (giong TX)"
+        range 1 13
+        default 6
+    config CSI_MAC_TX
+        string "MAC cua TX can loc (giong CSI_MAC_TX ben TX)"
+        default "1a:00:00:00:00:00"
+endmenu

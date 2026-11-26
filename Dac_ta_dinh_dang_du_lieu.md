@@ -133,6 +133,11 @@ khi driver đã bỏ các sóng mang con rỗng). Bộ dữ liệu WiFall/WiCoun
 `len` = 104. **(v0.3)** Giữ cấu hình CSI mặc định của esp‑csi để dữ liệu của nhóm so được với hai bộ này; ghi `len`
 thực tế sau buổi kiểm thử vào đây.
 
+**Đo thật 26/11/2026** (`firmware/tx` + `firmware/rx`, ESP‑IDF 6.1, TX gửi HT20 MCS0, cấu hình bảng trên): `len` = **128**,
+`sig_mode` 1, `cwb` 0, `first_word_invalid` 0. Sóng mang con rỗng là chỉ số 0 (DC) và 27–37 (dải bảo vệ);
+`features.py` bỏ 12 cái này nên còn **52**, khớp với `len` 104 của WiFall. Ví dụ esp‑csi mới (`csi_recv`) bật cả
+HT‑LTF, STBC, channel filter và HT40; nhóm không theo các giá trị đó vì muốn 52 sóng mang con độc lập ở 20 MHz.
+
 **Cách đọc `csi_hex`:** mỗi sóng mang con chiếm 2 byte có dấu (`int8`): **byte đầu là phần ảo, byte sau là phần thực** (theo tài liệu ESP-IDF). Biên độ = √(thực² + ảo²).
 Luôn đọc **theo cặp** `(byte 2i, byte 2i+1)`; không ghép lệch cặp (script mẫu `process1.py` của WiFall mắc lỗi này).
 
@@ -429,8 +434,8 @@ Mỗi dòng là **một khe 1 phút**:
 **Kiểm tra ở buổi kiểm thử phần cứng:** `len` thực tế; `rx_seq` của RX1 và RX2 có trùng nhau cho cùng một gói
 không; tốc độ CSI mỗi RX (`STAT`) khi laptop đọc đồng thời 3 cổng.
 
-**Tiên:** firmware TX (ESP‑NOW broadcast, in `BOOT`) và RX (in `BOOT`, `CSI`, `STAT` đúng mục 3) từ ví dụ esp‑csi;
-viết `features.py` xuất file đúng mục 5 và 5.2.
+**Tiên:** ~~firmware TX (ESP‑NOW broadcast, in `BOOT`) và RX (in `BOOT`, `CSI`, `STAT` đúng mục 3) từ ví dụ esp‑csi;
+viết `features.py` xuất file đúng mục 5 và 5.2~~ – Chiến làm xong 26/11/2026 (`firmware/tx`, `firmware/rx`).
 
 **Phúc:** firmware #3 in `BOOT`, `PRB`, `STAT` đúng mục 3; máy trạng thái đọc `probe.csv` và xuất file đúng mục 6
 (ghép vào nhánh người đang tạm gác).
