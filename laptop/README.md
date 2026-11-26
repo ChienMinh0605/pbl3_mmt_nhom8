@@ -13,6 +13,9 @@
 | `test_mo_phong.py` | Tự kiểm tra mô phỏng (cả giao diện) |
 | `nhip_tho.py` | **Thuật toán nhịp thở** (tầng 2b): PCA trên 2 RX, có độ tin cậy, kiểm tra cử động |
 | `doi_chieu_wifall.py` | Đối chiếu mô phỏng với CSI thật của WiFall (ESP32-S3) |
+| `canh_bao.py`, `test_canh_bao.py` | **Bộ ra quyết định cảnh báo**: ngã (xác nhận 10 s), bất động lâu, nhịp thở, cờ kênh nhiễu, đếm người "phân vân thì chọn 1" |
+| `danh_gia_canh_bao.py` | Đánh giá cảnh báo **theo sự kiện** trên buổi mô phỏng: độ nhạy ngã, báo giả mỗi giờ, độ trễ |
+| `wifall_dong_tac.py` | Kiểm chứng đặc trưng động tác trên WiFall (ngã / không ngã, chia theo người) |
 
 # logger.py – thu dữ liệu và ghi nhãn
 
@@ -116,8 +119,11 @@ python features.py --dong-tac          # → ../data/features_action/ (window 3 
 
 Mỗi RX một bộ cột có tiền tố (`rx1_csi_var_07`, `rx2_rssi_mad`, …): 4 đặc trưng độ phân tán của bài báo 2 cho RSSI và
 từng sóng mang con (52 khi `len` 104; 51 khi `len` 128, bỏ sóng mang con rỗng). Window 6 s có thêm `label`,
-`activity`, `n_people`, `breath_rate`; window động tác có `action` (FALL… hoặc NONE) và 2 đặc trưng hình dạng mỗi RX.
-Dashboard gọi đúng các hàm trong file này. Chưa khử nhiễu wavelet (`denoise: null` trong `feature_meta.json`).
+`activity`, `n_people`, `breath_rate`; window động tác có `action` (FALL… hoặc NONE) và các đặc trưng hình dạng mỗi RX:
+`shape_peak`, `shape_ratio` và 13 đặc trưng chuyển động trên thành phần chính PC1 của các sóng mang con
+(`shape_pc1`, `cvmed`, `cvmax`, năng lượng 5 dải `b0`…`b4` từ 0,3 tới 40 Hz, `slope`, `pos`, `after`, `before`, `busy`
+– ý nghĩa ở docstring). Trên mô phỏng 40 buổi chúng nâng F1 của FALL từ 0,49 lên 0,65; trên WiFall (dữ liệu thật,
+`python wifall_dong_tac.py`) không làm xấu đi. Dashboard gọi đúng các hàm trong file này. Chưa khử nhiễu wavelet (`denoise: null` trong `feature_meta.json`).
 
 ## Train mô hình: `train.py`
 
@@ -128,7 +134,13 @@ python train.py --target n_people                # đếm 0–3 người
 python train.py --target action                  # động tác + té ngã (dùng ../data/features_action)
 python train.py --feature-set rx1                # chỉ RX1 – so với 2 RX (all), như kế hoạch mục 6
 python train.py --feature-set rssi               # chỉ RSSI, để so với CSI như bài báo 2
+python train.py --feature-set gon                # bỏ cột từng sóng mang con (dễ "học vị trí")
 ```
+
+- `--target n_people` in thêm bảng **"phân vân thì chọn 1"**: chỉ nhận ≥ 2 người khi P(≥2) ≥ τ, kèm tỉ lệ lỗi nguy
+  hiểm (thật 1 người → đoán ≥ 2, hệ thống sẽ tắt phát hiện ngã). τ mặc định lưu vào mô hình (`uu_tien_1_nguong`, hiện
+  0,8: lỗi nguy hiểm 1,3 % trên mô phỏng, đổi lại chỉ nhận ra ~11 % lúc thật có 2–3 người).
+- `--target action` in thêm bảng ngưỡng P(FALL) và lưu ngưỡng ưu tiên bắt ngã (`fall_nguong`, chọn theo F2).
 
 Chưa có dữ liệu thật thì: `python mo_phong.py --tag sim --so-buoi 8` → `python features.py` → `python train.py`.
 
@@ -184,9 +196,10 @@ File `.streamlit/config.toml` giới hạn dashboard chỉ mở trên chính lap
 
 ## Mô phỏng 3D theo hướng mới: `mo_phong_ui.py` (giao diện) và `mo_phong.py` (dòng lệnh)
 
-Mô phỏng bố trí 1 TX + 2 RX ở một góc phòng: người đi lại, ngồi xuống, đứng dậy, nằm xuống, cúi nhặt, té ngã (3 kiểu),
-thở thường / bất thường; khách vào ra (tối đa 3 người); người ở phòng bên; người bấm phím ngồi trong phòng. Ghi ra
-buổi thu **đúng định dạng v0.3** (cột `board`, `rx_seq`, `len` 104, nhãn `STATE` / `ACTION` / `COUNT` / `RATE` /
+Mô phỏng bố trí 1 TX + 2 RX ở một góc phòng: người đi lại, ngồi xuống, đứng dậy, nằm xuống, cúi nhặt, té ngã (3 kiểu;
+sau ngã nằm bất động hoặc còn giãy, cố nhổm dậy), thở thường / bất thường, ngồi yên lâu; khách vào ra (tối đa 3
+người); người ở phòng bên; người bấm phím ngồi trong phòng; Wi‑Fi khác chiếm kênh, lò vi sóng. Ghi ra buổi thu
+**đúng định dạng v0.3** (cột `board`, `rx_seq`, `len` 104, nhãn `STATE` / `ACTION` / `COUNT` / `RATE` /
 `NOTE`) để viết trước phần xử lý khi chưa có board. Chỉ cần numpy (matplotlib để lưu ảnh tổng quan).
 
 ### Giao diện (khuyên dùng)
@@ -195,13 +208,15 @@ buổi thu **đúng định dạng v0.3** (cột `board`, `rx_seq`, `len` 104, n
 python mo_phong_ui.py          # mở http://127.0.0.1:8502 trên trình duyệt mặc định
 ```
 
-- **Bên trái**: chọn kịch bản (có sẵn / ngẫu nhiên theo seed / tự viết bằng các nút trạng thái, động tác, khách),
+- **Bên trái**: chọn kịch bản (có sẵn, kể cả `bat-dong` / ngẫu nhiên theo seed / tự viết bằng các nút trạng thái,
+  động tác, khách; nút **Nằm sau ngã, cử động** thêm `DOWN:30@15~`),
   seed, mức nhiễu, có người bấm phím hay không → **Chạy mô phỏng** (khoảng 1–2 giây cho 5 phút dữ liệu).
 - **Giữa**: phòng nhìn từ trên xuống (người, khách, thân khi nằm, vệt đi; đường truyền dày lên khi tín hiệu lệch nhiều;
   nét đứt là sóng dội tường tới từng RX, mờ đi khi bị người che – bật / tắt ở góc trên),
   thẻ thời gian, nhãn, tư thế, số người, nhịp thở đáp án.
 - **Bên phải**: biên độ trung bình và bản đồ nhiệt 52 sóng mang con của RX1, RX2 (20 giây gần nhất).
-- **Dưới**: dải thời gian cả buổi (bấm / kéo để tua), chạy / dừng, tốc độ ×0,5–×16.
+- **Dưới**: dải thời gian cả buổi (bấm / kéo để tua), chạy / dừng, tốc độ ×0,5–×16. Đoạn nằm sau ngã có cử động có
+  sọc chéo; vạch dưới đáy là đợt nhiễu: đỏ = Wi‑Fi khác chiếm kênh, cam = nhiễu không phải Wi‑Fi.
   Phím: **Space** chạy / dừng, **← →** tua 5 giây, **+ −** tốc độ, **Home** về đầu.
 - **Lưu vào data/raw/**: ghi đúng buổi vừa xem thành buổi thu (kèm ảnh `mo_phong.png` nếu chọn).
 - Server chỉ nghe trên `127.0.0.1`. Tắt bằng Ctrl+C trong terminal.
@@ -213,35 +228,57 @@ python mo_phong.py --tag sim1 --hinh                          # 1 người: đi,
 python mo_phong.py --tag dong --kich-ban nhieu-nguoi --hinh   # khách vào / ra (tối đa 3 người)
 python mo_phong.py --tag nga --kich-ban nga                   # nhiều lần ngã và động tác dễ nhầm
 python mo_phong.py --tag x --plan "EMPTY:10,ACTIVE:20,SIT_DOWN,STILL:60@12,STAND_UP,ACTIVE:10"
+python mo_phong.py --tag nga2 --plan "EMPTY:10,ACTIVE:20,FALL,DOWN:40@18~,STAND_UP,ACTIVE:10"   # ngã rồi giãy
+python mo_phong.py --tag yen --kich-ban bat-dong              # nằm yên 4 phút, ngồi yên 7 phút (~13 phút)
+python mo_phong.py --tag kenh --nhieu "wifi@60:30,khac@200:3" # ép thêm đợt nhiễu
 python mo_phong.py --tag ngaunhien --so-buoi 20               # 20 buổi kịch bản ngẫu nhiên, ~5 phút mỗi buổi
+python mo_phong.py --tag lau --so-buoi 20 --yen-lau 0.3       # như trên, 30 % số buổi có một đoạn yên 4–8 phút
 python test_mo_phong.py                                       # tự kiểm tra (cả giao diện)
 ```
 
 - `--plan`: `TRẠNG_THÁI:giây[@nhịp thở]`, `ĐỘNG_TÁC[:giây]`, `+` / `-` (khách vào / ra). Kịch bản sai tư thế
   (ví dụ `DOWN` khi chưa ngã, đi lại khi đang ngồi) sẽ báo lỗi.
+- `DOWN:giây@nhịp~` (hậu tố `~`, chỉ cho `DOWN`): ngã rồi không tự dậy được nhưng còn cử động – từng đợt 1–5 s, nghỉ
+  2–12 s: giãy tay chân 3–20 cm, lăn / xoay người, cố nhổm dậy (độ cao tư thế lên 0,2–0,35 rồi tụt lại); vẫn thở,
+  **không bao giờ đứng lên**. Nhãn vẫn `STATE DOWN`, thêm `NOTE` `DOWN cu-dong`. Dùng để thử "giãy vẫn phải cảnh báo
+  ngã". Trên CSI: giãy tay chân sát sàn chỉ hơi nổi trên nhiễu (cửa sổ 1 s dao động gấp ~1,2 lần nằm bất động), lúc
+  cố nhổm dậy thì rõ (~2–3 lần).
+- `--nhieu "wifi@60:30,khac@200:3"`: ép thêm đợt nhiễu (`loại@giây bắt đầu:thời lượng`), cộng với các đợt ngẫu nhiên;
+  thêm mục `tat` (ví dụ `"tat,wifi@60:30"`) để bỏ các đợt ngẫu nhiên. Sai cú pháp thì báo lỗi ngay.
 - `--hinh`: lưu `mo_phong.png` (quỹ đạo nhìn từ trên xuống + biên độ CSI của RX1, RX2 theo thời gian).
 - `--so-buoi N [--phut 5]`: N buổi kịch bản ngẫu nhiên (`tag-01`, `tag-02`, …; seed tăng dần), ~30 % buổi có khách,
-  ngã chiếm tỉ lệ khá cao để đủ mẫu. Kịch bản của từng buổi ghi trong `meta.json` → `simulator.plan`.
+  ngã chiếm tỉ lệ khá cao để đủ mẫu, ~35 % lần ngã có cử động (`DOWN~`). `--yen-lau 0.3`: 30 % số buổi có một đoạn
+  ngồi / nằm yên 4–8 phút (mặc định 0 – bộ dữ liệu cũ giữ phân bố). Kịch bản của từng buổi ghi trong `meta.json` →
+  `simulator.plan`.
 - `--nguoi-bam`: người bấm phím ngồi yên cạnh laptop suốt buổi (thở, cử động nhẹ, **không** tính vào `COUNT`).
 - `--seed`, `--noise`, `--phat-lai` (ghi theo thời gian thực). Cùng kịch bản + seed thì luôn ra cùng dữ liệu.
 - Ngã có 3 kiểu chọn ngẫu nhiên: đổ thẳng, khuỵu gối rồi đổ, ngã từ ghế (khi đang ngồi); kiểu ngã ghi ở nhãn `NOTE`.
   Khách dừng lâu (≥ 4 giây) thì ngồi xuống.
 - **Mỗi buổi một phòng hơi khác**: đồ đạc cố định xê dịch ±0,2 m và có thêm 3–6 vật lặt vặt (ghế, túi, chai…) ở chỗ
   ngẫu nhiên → kênh lúc phòng trống khác nhau giữa các buổi như ngoài đời (lý do phải chia train / test theo buổi).
-  **Đợt nhiễu chen ngang** (Wi-Fi khác, lò vi sóng): trung bình 1 đợt / 2 phút, 1–4 s, nhiễu ×3 và mất 30 % gói; vạch đỏ
-  trên giao diện. Người đi lại mượt (tăng / giảm tốc, rẽ vòng, ≤ ~1,1 m/s), ra vào đi bộ qua cửa. Các vật và tổng thời
-  gian nhiễu của buổi ghi ở `meta.json` → `simulator.objects`, `simulator.bursts_s`. Tất cả suy ra từ seed.
+  Người đi lại mượt (tăng / giảm tốc, rẽ vòng, ≤ ~1,1 m/s), ra vào đi bộ qua cửa. Các vật ghi ở `meta.json` →
+  `simulator.objects`. Tất cả suy ra từ seed.
+- **Đợt nhiễu chen ngang**, hai loại (giá trị khởi đầu, chưa đo trên board):
+  - `wifi` – thiết bị Wi‑Fi khác chiếm kênh CSI (tải dữ liệu): đợt ngắn 1–4 s (cùng các đợt `khac`: trung bình 1 đợt /
+    2 phút, 70 % là Wi‑Fi) và đợt dài 10–60 s (trung bình 1 đợt / 5 phút). Trong đợt: `n_filtered` của dòng `STAT`
+    50–400 khung/giây (lúc thường 0–5), mất 5–40 % gói của TX (kênh càng bận mất càng nhiều), nhiễu CSI ×1,5, 1–3 % gói
+    CSI hỏng (biên độ cả gói nhảy ×/÷ 2–4). Đây là tín hiệu để nhánh thiết bị (Q2) đánh dấu đoạn CSI kém tin cậy.
+  - `khac` – nhiễu không phải Wi‑Fi (lò vi sóng): `n_filtered` không tăng, `noise_floor` trong dòng `CSI` -95 → -85,
+    nhiễu ×3, mất 30 % gói.
+- **Đáp án trong `meta.json` → `simulator`** (giây tính từ đầu mô phỏng): `truth` = `[[nhãn, đầu, cuối], …]` mọi đoạn,
+  `down_cu_dong` = `[[đầu, cuối], …]` các đoạn `DOWN~`, `interference` = `[[loại, đầu, cuối], …]` các đợt nhiễu,
+  `bursts_s` = tổng số giây có nhiễu, `nhieu` = chuỗi `--nhieu` đã dùng; `t0_host` = `host_time` của giây 0, nên
+  `host_time = t0_host + giây`.
 - **Chống "kết quả đẹp ảo"**: động tác không ghi thời lượng thì mỗi lần một thời lượng ngẫu nhiên (ví dụ ngã 0,8–1,6 s,
   ngồi xuống 1,2–2,4 s) và biên độ khác nhau; nhịp thở dao động ±8 %, độ sâu ±25 %; ngồi / nằm yên lâu thì 20–40 giây
-  xê dịch 3–8 cm một lần (`DOWN` – nằm sau ngã – vẫn bất động); **nhãn bấm trễ 0–0,8 s** (trung bình 0,3 s) như người
-  bấm phím thật. Thời điểm thật của từng đoạn ghi ở `meta.json` → `simulator.truth` để chấm thuật toán.
+  xê dịch 3–8 cm một lần (`DOWN` bất động, `DOWN~` cử động như trên); **nhãn bấm trễ 0–0,8 s** (trung bình 0,3 s) như
+  người bấm phím thật – chấm thuật toán theo `simulator.truth`, không theo `labels.csv`.
   Hệ quả đã thấy: nhịp thở đo bằng FFT thô chỉ đúng ~70 % số lần; trừ trung bình trượt 4 giây trước khi FFT thì ~95 %.
 - Mô hình **3D** (chi tiết ở đầu `mo_phong.py`): phòng 4 × 3,5 × 2,8 m có sàn, trần; phản xạ bậc 1–2 trên 6 mặt với hệ
   số Fresnel theo vật liệu (bê tông, thạch cao); ăng-ten cao 0,75 m; người là 9 điểm theo chiều cao cơ thể ở tư thế
   đứng / ngồi / nằm; người che sóng tính bằng nhiễu xạ Fresnel–Kirchhoff qua tấm chắn (đứng chắn giữa đường truyền
   ~9 dB, nằm dưới sàn gần như không chắn); AGC của ESP32 tự bù ~90 % sự đổi công suất. Chưa có phản xạ bậc ≥ 3 và
   người che phản xạ bậc 2. Chỉ để **thử luồng xử lý**, không dùng để báo cáo độ chính xác.
-- `kiem_tra_buoi_thu.py`, `train.py`, dashboard **chưa đọc được v0.3** (sẽ trộn RX1 với RX2) – phải sửa theo v0.3.
 - **Đã đối chiếu với WiFall** (`python doi_chieu_wifall.py`, kết quả ở `../results/doi_chieu_wifall/`): mức biên độ 15,
   nhiễu 0,05, AGC 0,05 lấy theo ESP32-S3 thật; dò tham số cho thấy mô phỏng khớp nhất khi **AGC bù gần hết** sự đổi công
   suất (độ lệch 0,49 → 0,29). Mức dao động khi có động tác cùng cỡ với thật (lệch trung bình ~30 %), riêng biên độ
@@ -276,6 +313,57 @@ nhưng nín thở bị nhầm là có thở cũng tăng (vì 2 cửa sổ 30 s c
 Lưu ý khi dùng: "không thấy nhịp thở" ở **một** cửa sổ chưa đủ để báo ngưng thở (thường do tín hiệu yếu). Cảnh báo ngưng
 thở nên cần: người đang yên, trước đó đo được nhịp ổn định, rồi nhiều cửa sổ liên tiếp không thấy. Ngưỡng `MIN_PROM`
 đổi được: thấp hơn thì trả lời nhiều hơn nhưng sai nhiều hơn (bảng ở cuối lệnh tự đánh giá).
+Từ khi mô phỏng có đợt Wi‑Fi chiếm kênh (gói CSI hỏng), tỉ lệ trả lời giảm (~0,53 → ~0,39): nên bỏ các giây kênh bận
+trước khi đo – `canh_bao.py` đã không dùng kết quả nhịp thở chồng lên giây kênh bận.
+
+## Cảnh báo: `canh_bao.py` và đánh giá theo sự kiện `danh_gia_canh_bao.py`
+
+`canh_bao.py` biến dự đoán của các tầng thành **sự kiện cảnh báo** theo đúng quy tắc của kế hoạch (mục 3): `NGA` (ngã +
+10 s chờ; biến thể b – mặc định – huỷ khi thấy đứng dậy hoặc Hoạt động suốt 10 s, giãy ngắn vẫn báo), `NGA_KHAN_CAP` (ngã mà không thấy cử động lẫn nhịp thở), `BAT_DONG_LAU`
+(Yên ≥ 300 s), `THO_BAT_THUONG` (> 25 hoặc < 8 nhịp/phút), `NGUNG_THO` (nhiều cửa sổ liên tiếp không thấy nhịp, sau khi
+đã đo được). Đếm người: phân vân thì chọn 1, và chỉ sang chế độ nhiều người khi thấy ≥ 2 người ở nhiều window liên tiếp.
+Cờ kênh: giây kênh bận (`n_filtered` > 30 hoặc `n_rx` < 85 gói/s) không dùng để kết luận; ngã phát hiện lúc kênh bận
+thì chờ kênh sạch rồi mới xác nhận. Mọi ngưỡng nằm trong `ThamSo`; dashboard gọi `CanhBao.cap_nhat()` mỗi lần có dự
+đoán mới (chưa ghép). Kiểm tra: `python test_canh_bao.py`.
+
+```bash
+python mo_phong.py --tag v2 --so-buoi 40 --yen-lau 0.3 --data-dir ../data/sim2      # dữ liệu giả, tách khỏi data/raw
+python features.py ../data/sim2/raw/* --out ../data/sim2/features
+python features.py --dong-tac ../data/sim2/raw/* --out ../data/sim2/features_action
+python danh_gia_canh_bao.py --data ../data/sim2 --folds 5 --jobs 5                 # mặc định cách B, ~15 phút
+python danh_gia_canh_bao.py --du-doan ../results/<...>_canh_bao/du_doan.joblib --tau-nga 0.3 --tham-so so_window_nga=1
+```
+
+Chia theo buổi (GroupKFold), mỗi lượt train mức hoạt động, ≥ 2 người (window 6 s trượt, nhãn lúc cuối window –
+`--tang0 cuoi`), động tác (25 cột `mot`/`mon` mỗi board, XGBoost sâu 5) trên buổi train; buổi test tính đặc trưng
+**trượt từ dữ liệu thô, không dùng nhãn** (như lúc chạy thật; nhịp thở trên lưới thời gian, gói mất = NaN), chạy
+`canh_bao`, so với thời điểm thật (`meta.json → simulator.truth`). So 4 cấu hình: biến thể huỷ ngã a / b × có / không cờ
+kênh. `--du-doan` chấm lại trong vài giây với tham số khác, không train lại.
+
+Kết quả trên 40 buổi `data/sim2` (4,3 giờ, có giãy sau ngã, nhiễu kênh, ngồi yên lâu), **cách B, biến thể b, có cờ
+kênh**, ngưỡng P(FALL) 0,4 – **dữ liệu giả, chỉ để thử luồng**. Báo cáo: `../results/20261126_092749_canh_bao/`.
+
+| | Vòng 1 | Vòng 2 | **Vòng 3 (26/11)** |
+|---|---|---|---|
+| Ngã bắt được (trong 30 s) | 34/53 | 39/53 | **44/53 (83 %)**, trễ TB 13,6 s; ngã có giãy 17/18 |
+| Báo ngã giả (lần/giờ) | ~14 | 6,7 | **5,1** – còn lại sinh từ lúc đi lại và ngồi yên |
+| Báo giả khác (lần/giờ): khẩn cấp / thở bất thường / ngưng thở / bất động lâu | 3,5 / 16,7 / 0,7 / – | 1,9 / 1,9 / 1,9 / 0,7 | 1,2 / 2,1 / 2,6 / 0,7 |
+| Bất động lâu bắt được | 3/8 | 5/8 | 5/8 |
+| Thở nhanh/chậm / nín thở bắt được | 8/21, 5/12 | 2/21, 1/12 | 6/21, 1/12 – tín hiệu thở trên mô phỏng sát nhiễu; nín thở 15–36 s ngắn so với quy tắc 3 cửa sổ |
+| Đếm người: lỗi nguy hiểm / nhận ra 2–3 người | 0,3 % / 9 % | 0,4 % / ~9 % | **0,1 %** / 10 % |
+| Mỗi board: cột (6 s + 3 s), nút cây | 212 + 227 | 212 + 25 | **19 + 25**, ~32 + ~69 nghìn nút (~1–1,5 MB) |
+
+Vòng 3: cột gọn `g6` cho window 6 s (4 loại đặc trưng của bài báo 2 × RSSI, mức chung, PC1, PC2 + năng lượng dải thở
++ tỉ lệ gói hỏng), cờ kênh chỉ lùi hạn khi giây bận có thể che dấu hiệu đứng dậy / đi lại, `nhip_tho` cân bằng lại.
+Quy tắc "Trống liên tục 4 s sau ngã thì huỷ" (`huy_trong_s`) đang TẮT, chờ kiểm trên dữ liệu thật.
+
+**Gộp hai RX (`--gop`).** `chung` = một mô hình trên cột của cả hai RX (gộp sớm, cách A); `muon` = mỗi RX một mô hình
+chỉ trên cột của nó, như mỗi board tự chạy, rồi gộp kết quả (gộp muộn, cách B – hướng chính vì mục tiêu chạy trên
+board, mặc định): ngã lấy max P(FALL) (một board thấy là đủ), nhiều người lấy min P(≥2) (cả hai cùng thấy), mức hoạt
+động / động tác lấy trung bình, nhịp thở lấy board có đỉnh nổi nhất. So sánh A/B vòng 1 (trước khi có bộ 25 cột): trên 40 buổi `data/sim2` (biến thể b, có cờ kênh), so ở cùng
+mức báo ngã giả: A ngưỡng P(FALL) 0,3 → 31/53 ngã, 9,0 lần/giờ; B ngưỡng 0,5 → 30/53, 8,1 lần/giờ – **ngang nhau**. B tốt
+hơn ở nhịp thở (thở nhanh/chậm 13/21 so với 8/21, ngưng thở giả 3 so với 6,7 lần/giờ), kém hơn ở thở bất thường giả
+(16,7 so với 10,9 lần/giờ) và nín thở. Mỗi board của B: 212 cột (6 s) + 227 cột (3 s), ~64 nghìn nút cây XGBoost.
 
 ## File `logger_config.json`
 
