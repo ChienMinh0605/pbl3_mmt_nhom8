@@ -59,7 +59,8 @@ CSI RX1, RX2 (~100 mẫu/s)
    │             đi lại / ngồi xuống / đứng dậy / nằm xuống / cúi nhặt / NGÃ / không có động tác
    │             Tư thế hiện tại suy ra từ động tác cuối (ngồi xuống → đang ngồi ...)
    │             CẢNH BÁO NGÃ = động tác "ngã" + 10 s sau đó không đứng dậy / đi lại
-   │             (cử động tại chỗ như giãy, cố bò dậy KHÔNG huỷ cảnh báo)
+   │             (huỷ khi thấy đứng dậy, hoặc "Hoạt động" liên tục suốt 10 s chờ; giãy vài giây rồi nằm
+   │             vẫn báo – giới hạn: giãy liên tục ≥ 10 s thì CSI không phân biệt được với đi lại)
    │             CẢNH BÁO BẤT ĐỘNG LÂU = "Yên" liên tục quá ngưỡng (demo: 5 phút)
    │
    │            Tầng 2b: khi Yên → window 30 s, lọc 0,1–0,6 Hz, FFT, chọn đường truyền có dải thở mạnh nhất

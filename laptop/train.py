@@ -8,6 +8,9 @@ Ví dụ:
     python train.py --target action                   # động tác + té ngã (window 3 s, ../data/features_action)
     python train.py --feature-set rx1                 # chỉ RX1 – so với 2 RX (all)
     python train.py --feature-set rssi                # chỉ RSSI (so sánh với CSI như bài báo 2)
+    python train.py --feature-set gon                 # bỏ cột từng sóng mang con (chỉ RSSI + shape_*)
+    python train.py --target action --feature-set rx1+mot   # bộ gọn cho board: 25 cột mot_*/mon_* của RX1
+    python train.py --target action --feature-set mot --board-chung --sau 5   # MỘT mô hình dùng chung mọi board
 
 Các bước:
 1. Đọc mọi file .csv trong thư mục đặc trưng, bỏ window không hợp lệ (valid = 0).
@@ -17,6 +20,8 @@ Các bước:
    và bỏ phiếu mềm của các mô hình trên (tầng 2 trong bài báo 2).
 4. Train lại mô hình được chọn trên toàn bộ dữ liệu và lưu vào ../models/ để dashboard dùng.
 Mục tiêu nhiều lớp (activity, n_people, action) train với trọng số cân bằng lớp, F1 tính trung bình các lớp (macro).
+5. n_people: bảng "phân vân thì chọn 1" theo τ, lưu τ mặc định vào mô hình (khoá "uu_tien_1_nguong", áp dụng bằng
+   predict_uu_tien_1). action: bảng ngưỡng P(FALL) ưu tiên recall, lưu τ vào khoá "fall_nguong".
 """
 import argparse
 import json
@@ -44,7 +49,7 @@ except ImportError:
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 SPEC_VERSION = "0.3"
-FEATURE_RE = re.compile(r"^(rx\d_)?((rssi|csi)_(var|mad|range|iqr)(_\d{2})?|shape_(peak|ratio))$")
+FEATURE_RE = re.compile(r"^(rx\d_)?((rssi|csi)_(var|mad|range|iqr)(_\d{2})?|(shape|mot|mon)_[a-z]+\d?|g6_[a-z]+_[a-z0-9]+)$")
 REQUIRED = ["session_id", "win_start", "valid"]
 TARGETS = {"label": "có người", "activity": "mức hoạt động", "n_people": "số người", "action": "động tác"}
 
@@ -73,8 +78,21 @@ def load_features(folder, target):
 
 
 def select_features(feats, which):
+    """which: một bộ hoặc nhiều bộ nối bằng "+" (lấy phần chung), ví dụ "rx1+mot"."""
+    if "+" in which:
+        for w in which.split("+"):
+            feats = select_features(feats, w)
+        return feats
+    if which == "mot":                                              # bộ gọn bền với gói hỏng (features.robust_features)
+        return [c for c in feats if re.search(r"(^|_)mo[tn]_", c)]
+    if which == "g6":                                               # bộ gọn window 6 s (features.compact6_features)
+        return [c for c in feats if re.search(r"(^|_)g6_", c)]
+    if which == "bai_bao":                                          # 4 đặc trưng × RSSI + từng sóng mang con (212 cột)
+        return [c for c in feats if re.search(r"(^|_)(rssi|csi)_", c)]
     if which in ("rssi", "csi"):
         return [c for c in feats if f"{which}_" in c]              # "rssi_" không chứa "csi_" nên không lẫn
+    if which == "gon":                                              # bỏ 4 cột của từng sóng mang con, giữ RSSI + shape_*
+        return [c for c in feats if not re.search(r"csi_[a-z]+_\d{2}$", c)]
     if which.startswith("rx"):
         return [c for c in feats if c.startswith(which + "_")]
     return list(feats)
@@ -108,16 +126,18 @@ class VarianceThreshold(ClassifierMixin, BaseEstimator):
         return np.column_stack([1 - p, p])
 
 
-def build_models(feat_names, n_class, seed=0):
+def build_models(feat_names, n_class, seed=0, xgb=None):
+    """xgb: dict ghi đè tham số XGBoost, vd. {"max_depth": 5} (cỡ mô hình cho board)."""
     base = {
         "rf": RandomForestClassifier(n_estimators=300, n_jobs=-1, random_state=seed),
         # max_features="sqrt": mỗi lần chia nhánh chỉ xét √(số cột) đặc trưng -> nhanh hơn nhiều với ~200 cột
         "gb": GradientBoostingClassifier(max_features="sqrt", random_state=seed),
     }
     if XGBClassifier is not None:
-        base["xgb"] = XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.1, subsample=0.9,
-                                    colsample_bytree=0.5, eval_metric="logloss" if n_class == 2 else "mlogloss",
-                                    n_jobs=-1, random_state=seed)
+        base["xgb"] = XGBClassifier(**{"n_estimators": 300, "max_depth": 4, "learning_rate": 0.1, "subsample": 0.9,
+                                       "colsample_bytree": 0.5,
+                                       "eval_metric": "logloss" if n_class == 2 else "mlogloss", "n_jobs": -1,
+                                       "random_state": seed, **(xgb or {})})
     models = {"nguong": VarianceThreshold(feature_names=feat_names)} if n_class == 2 else {}   # ngưỡng: chỉ 2 lớp
     models.update(base)
     models["bophieu"] = VotingClassifier(list(base.items()), voting="soft")
@@ -181,6 +201,65 @@ def summarize(cv, y, detail, groups, splits, n_class):
     return rows, per_detail, per_session
 
 
+TAUS = (0.5, 0.6, 0.7, 0.8, 0.9)
+FALL_TAUS = (0.5, 0.4, 0.3, 0.2, 0.15, 0.1)
+
+
+def predict_uu_tien_1(proba, classes, tau):
+    """Đếm người "phân vân thì chọn 1": chỉ đoán ≥ 2 người khi P(≥ 2) ≥ tau, còn lại lấy lớp tốt nhất trong {0, 1}.
+    Vì đoán nhầm 1 người thành 2–3 làm hệ thống tắt phát hiện ngã (lỗi nguy hiểm); bỏ sót khách chỉ hiện sai số người."""
+    proba, classes = np.asarray(proba, float), np.asarray(classes)
+    many = classes >= 2
+    lo, hi = np.where(many, -1, proba).argmax(axis=1), np.where(many, proba, -1).argmax(axis=1)
+    return classes[np.where(proba[:, many].sum(axis=1) >= tau, hi, lo)]
+
+
+def bang_uu_tien_1(proba, truth, classes):
+    """Bảng theo tau (dòng đầu: argmax thường). Chọn tau nhỏ nhất đưa lỗi nguy hiểm ≤ 2 %, không có thì tau lớn nhất."""
+    rows = []
+    for tau in (None,) + TAUS:
+        pred = classes[proba.argmax(axis=1)] if tau is None else predict_uu_tien_1(proba, classes, tau)
+        rows.append({"tau": tau, "nguy_hiem": float(np.mean(pred[truth == 1] >= 2)),
+                     "bat_dung_2": float(np.mean(pred[truth >= 2] >= 2)), "accuracy": float(np.mean(pred == truth))})
+    ok = [r["tau"] for r in rows[1:] if r["nguy_hiem"] <= 0.02]
+    return rows, (ok[0] if ok else TAUS[-1])
+
+
+def bang_nguong_fall(proba, truth, classes, sessions, starts):
+    """Bảng ngưỡng P(FALL) (dòng đầu: argmax): đoán FALL khi P(FALL) ≥ tau, còn lại lấy lớp tốt nhất khác FALL.
+    Recall theo lần ngã = có ít nhất một window của lần ngã đó bị đoán FALL (cảnh báo còn bước xác nhận 10 s phía sau,
+    nên chấp nhận thêm báo nhầm ở mức window). Chọn tau có F2 (recall nặng gấp 4 precision) cao nhất."""
+    f = int(np.flatnonzero(classes == "FALL")[0])
+    idx = np.flatnonzero(truth == "FALL")
+    event = np.cumsum(np.r_[True, (sessions[idx][1:] != sessions[idx][:-1]) | (np.diff(starts[idx]) > 0.75)])
+    rows = []
+    for tau in (None,) + FALL_TAUS:
+        pred = proba.argmax(axis=1) if tau is None else np.where(
+            proba[:, f] >= tau, f, np.where(np.arange(len(classes)) == f, -1, proba).argmax(axis=1))
+        hit = pred == f
+        rec, pre = float(hit[idx].mean()), float((truth[hit] == "FALL").mean()) if hit.any() else 0.0
+        rows.append({"tau": tau, "recall": rec, "precision": pre, "f2": 5 * rec * pre / max(4 * pre + rec, 1e-9),
+                     "recall_lan_nga": float(np.mean([hit[idx][event == e].any() for e in np.unique(event)])),
+                     "none_thanh_fall": int((hit & (truth == "NONE")).sum()),
+                     "dong_tac_khac_thanh_fall": int((hit & (truth != "NONE") & (truth != "FALL")).sum())})
+    return rows, max(rows[1:], key=lambda r: r["f2"])["tau"]
+
+
+def _check_rules():
+    f = ["rx1_csi_var_03", "rx1_mot_slope", "rx2_mon_b1", "rx1_shape_pos", "rx1_rssi_var", "rx1_g6_iqr_rssi"]
+    assert select_features(f, "rx1+mot") == ["rx1_mot_slope"] and select_features(f, "mot") == f[1:3]
+    assert select_features(f, "g6") == f[5:] and select_features(f, "bai_bao") == [f[0], f[4]]
+    assert select_features(f, "rssi") == [f[4]]
+    assert all(FEATURE_RE.match(c) for c in f)
+    p = np.array([[0.1, 0.5, 0.25, 0.15], [0.0, 0.2, 0.7, 0.1]])
+    assert list(predict_uu_tien_1(p, np.arange(4), 0.5)) == [1, 2]
+    assert list(predict_uu_tien_1(p, np.arange(4), 0.9)) == [1, 1]
+    c = np.array(["FALL", "NONE"])
+    rows, _ = bang_nguong_fall(np.array([[0.3, 0.7], [0.6, 0.4], [0.1, 0.9]]), np.array(["FALL", "FALL", "NONE"]), c,
+                               np.array(["a", "a", "a"]), np.array([0.0, 0.5, 9.0]))
+    assert rows[0]["recall"] == 0.5 and rows[0]["recall_lan_nga"] == 1.0 and rows[3]["recall"] == 1.0
+
+
 def report(rows, per_detail, per_session, info, top_features):
     L = []
     L.append(f"KẾT QUẢ TRAIN – {info['created']}")
@@ -220,11 +299,17 @@ def main():
     ap = argparse.ArgumentParser(description="Train và đánh giá mô hình (có người, mức hoạt động, số người, động tác).")
     ap.add_argument("--target", choices=list(TARGETS), default="label")
     ap.add_argument("--features-dir", help="mặc định ../data/features (../data/features_action nếu --target action)")
-    ap.add_argument("--feature-set", choices=["all", "csi", "rssi", "rx1", "rx2"], default="all")
+    ap.add_argument("--feature-set", default="all",
+                    help="all, gon, mot, g6, bai_bao, csi, rssi, rx1, rx2 hoặc nối bằng +, vd. rx1+mot")
     ap.add_argument("--folds", type=int, default=0, help="0 = mỗi buổi thu một lượt (mặc định)")
     ap.add_argument("--final", default="best", help="mô hình lưu lại: best, nguong, rf, gb, xgb, bophieu")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--cay", type=int, default=300, help="XGBoost: số vòng (mỗi vòng một cây cho mỗi lớp)")
+    ap.add_argument("--sau", type=int, default=4, help="XGBoost: độ sâu tối đa của cây")
+    ap.add_argument("--board-chung", action="store_true",
+                    help="một mô hình cho mọi board: xếp chồng hàng của từng RX (bỏ tiền tố rxN_) → gấp đôi dữ liệu")
     args = ap.parse_args()
+    _check_rules()
 
     args.features_dir = args.features_dir or str(ROOT / "data" / ("features_action" if args.target == "action"
                                                                   else "features"))
@@ -239,6 +324,12 @@ def main():
     cols = select_features(feats, args.feature_set)
     if not cols:
         sys.exit(f"Không có cột đặc trưng nào cho bộ '{args.feature_set}'.")
+    if args.board_chung:                       # hai board đặt đối xứng, cùng loại đặc trưng → học chung một mô hình
+        boards, base = sorted({c.split("_")[0] for c in cols}), sorted({c.split("_", 1)[1] for c in cols})
+        if not all(re.match(r"rx\d_", c) for c in cols) or len(cols) != len(boards) * len(base):
+            sys.exit("--board-chung cần cột có tiền tố rxN_ và đủ cột như nhau ở mọi board.")
+        data = pd.concat([data.assign(**{c: data[f"{b}_{c}"] for c in base}) for b in boards], ignore_index=True)
+        cols = base
     sessions = data["session_id"].unique()
     if len(sessions) < 2:
         sys.exit("Cần ít nhất 2 buổi thu để đánh giá theo buổi.")
@@ -252,7 +343,7 @@ def main():
     detail = data["label_detail"].to_numpy() if "label_detail" in data else data[args.target].to_numpy()
     print(f"Đọc {n_all} window, dùng {len(data)} window hợp lệ từ {len(sessions)} buổi thu, {len(cols)} đặc trưng.")
 
-    models = build_models(cols, n_class, args.seed)
+    models = build_models(cols, n_class, args.seed, {"n_estimators": args.cay, "max_depth": args.sau})
     cv_name = "leave-one-session-out" if args.folds == 0 or args.folds >= len(sessions) else f"GroupKFold {args.folds} phần"
     print(f"Đánh giá chéo theo buổi thu ({cv_name}):")
     cv, splits = cross_validate(models, X, y, groups, args.folds, n_class)
@@ -273,8 +364,28 @@ def main():
     info = {"created": created, "features_dir": str(Path(args.features_dir).resolve()), "feature_set": args.feature_set,
             "target": args.target, "class_counts": {str(c): int((y == i).sum()) for i, c in enumerate(classes)},
             "n_features": len(cols), "n_windows": int(len(data)), "n_sessions": int(len(sessions)), "cv": cv_name,
-            "simulated": bool(fmeta.get("simulated", False)), "final_model": final_key}
+            "simulated": bool(fmeta.get("simulated", False)), "final_model": final_key,
+            "board_chung": args.board_chung, "xgb": {"n_estimators": args.cay, "max_depth": args.sau}}
     text = report(rows, per_detail, per_session, info, top)
+    extra, proba = {}, cv[final_key]["proba"]                  # bảng ngưỡng tính trên xác suất đánh giá chéo
+    if args.target == "n_people":
+        tab, tau = bang_uu_tien_1(proba, classes[y], classes)
+        extra = {"uu_tien_1_nguong": tau, "uu_tien_1_bang": tab}
+        text += (f"\n\nĐếm người \"phân vân thì chọn 1\" ({NAMES[final_key]}): chỉ đoán ≥ 2 người khi P(≥2) ≥ τ, "
+                 f"còn lại lấy lớp tốt nhất trong {{0, 1}}\n{'τ':>7s} {'lỗi nguy hiểm (thật 1 → ≥2)':>28s} "
+                 f"{'bắt đúng ≥2':>12s} {'accuracy':>9s}\n")
+        text += "\n".join(f"{'argmax' if r['tau'] is None else r['tau']:>7} {r['nguy_hiem']:28.3f} "
+                          f"{r['bat_dung_2']:12.3f} {r['accuracy']:9.3f}" for r in tab)
+        text += f"\nτ mặc định lưu vào mô hình (uu_tien_1_nguong): {tau}"
+    elif args.target == "action" and "FALL" in classes:
+        tab, tau = bang_nguong_fall(proba, classes[y], classes, groups, data["win_start"].to_numpy())
+        extra = {"fall_nguong": tau, "fall_nguong_bang": tab}
+        text += (f"\n\nNgưỡng P(FALL) ({NAMES[final_key]}): đoán FALL khi P(FALL) ≥ τ\n{'τ':>7s} {'recall':>7s} "
+                 f"{'precision':>9s} {'F2':>6s} {'recall lần ngã':>15s} {'NONE→FALL':>10s} {'động tác khác→FALL':>19s}\n")
+        text += "\n".join(f"{'argmax' if r['tau'] is None else r['tau']:>7} {r['recall']:7.3f} {r['precision']:9.3f} "
+                          f"{r['f2']:6.3f} {r['recall_lan_nga']:15.3f} {r['none_thanh_fall']:10d} "
+                          f"{r['dong_tac_khac_thanh_fall']:19d}" for r in tab)
+        text += f"\nτ lưu vào mô hình (fall_nguong, F2 cao nhất): {tau}"
     print()
     print(text)
 
@@ -282,7 +393,7 @@ def main():
     res_dir.mkdir(parents=True, exist_ok=True)
     (res_dir / "report.txt").write_text(text + "\n", encoding="utf-8")
     metrics = {"info": info, "models": [{k: v for k, v in r.items()} for r in rows], "per_detail": per_detail,
-               "per_session": per_session, "top_features": top, "feature_meta": fmeta}
+               "per_session": per_session, "top_features": top, "feature_meta": fmeta, **extra}
     (res_dir / "metrics.json").write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
 
     model_dir = ROOT / "models"
@@ -291,7 +402,7 @@ def main():
               "target": args.target, "classes": [c.item() if hasattr(c, "item") else c for c in classes],
               "spec_version": SPEC_VERSION, "feature_meta": fmeta, "trained_on_sessions": [str(s) for s in sessions],
               "cv_metrics": next(r for r in rows if r["model"] == final_key), "created": created,
-              "simulated": info["simulated"]}
+              "simulated": info["simulated"], **extra}
     path = model_dir / f"model_{created}_{args.target}_{args.feature_set}_{final_key}.joblib"
     joblib.dump(bundle, path)
     joblib.dump(bundle, model_dir / f"model_latest_{args.target}.joblib")      # dashboard đọc theo mục tiêu

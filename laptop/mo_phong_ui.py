@@ -29,7 +29,8 @@ NAMES = {"EMPTY": "Phòng trống", "NEIGHBOR": "Người ở phòng bên", "ACT
          "DOWN": "Nằm sau ngã", "BREATH_ABN": "Thở bất thường", "FALL": "Ngã", "SIT_DOWN": "Ngồi xuống",
          "STAND_UP": "Đứng dậy", "LIE_DOWN": "Nằm xuống", "PICK_UP": "Cúi nhặt"}
 PRESETS = {"mot-nguoi": "Một người – đủ động tác", "nhieu-nguoi": "Có khách vào / ra",
-           "nga": "Nhiều lần ngã + động tác dễ nhầm", "phong-ben": "Người đi ở phòng bên"}
+           "nga": "Nhiều lần ngã + động tác dễ nhầm", "phong-ben": "Người đi ở phòng bên",
+           "bat-dong": "Yên lâu: nằm 4 phút, ngồi 7 phút"}
 
 
 def params(req):
@@ -56,7 +57,7 @@ def params(req):
     total = sum(max(sim.ACTIONS[n]) if d is None else d for n, d, _ in sim.parse_plan(plan))
     if total > MAX_S:
         raise ValueError(f"kịch bản dài {total / 60:.1f} phút, tối đa {MAX_S // 60} phút")
-    return Namespace(plan=plan, seed=seed, noise=noise, nguoi_bam=bool(req.get("nguoi_bam")), rate=RATE)
+    return Namespace(plan=plan, seed=seed, noise=noise, nguoi_bam=bool(req.get("nguoi_bam")), rate=RATE, nhieu=None)
 
 
 def heat(im, re):
@@ -111,8 +112,8 @@ def run(req):
         "heat": {b: heat(im, re) for b, (im, re, _) in rx.items()},
         "spans": [[n, round(a, 2), round(b, 2)] for n, a, b in spans],
         "notes": [[round(a, 2), v] for a, e, v in labels if e == "NOTE"],
-        "bursts": np.flatnonzero(np.diff(np.r_[0, sim.bursts_for(p.seed, len(t), RATE).astype(int), 0])).reshape(-1, 2)
-                  .__truediv__(RATE).round(2).tolist(),
+        "interference": [list(x) for x in sim.interference_for(p.seed, len(t), RATE, p.nhieu)],
+        "down_cu_dong": sim.down_cu_dong(p.plan, spans),
         "breath_est": breath_estimates(spans, rx),
     }
 

@@ -18,3 +18,9 @@ tai_lieu/
 build/
 .pio/
 sdkconfig.old
+
+# firmware thử mô hình: file sinh ra (xuat_board.py, idf.py)
+firmware/*/main/*.bin
+firmware/*/main/lop.txt
+firmware/*/sdkconfig
+firmware/*/dependencies.lock
