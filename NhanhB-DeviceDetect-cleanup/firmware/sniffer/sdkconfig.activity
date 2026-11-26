@@ -1,0 +1,4 @@
+# scripts/sniffer.sh uses this overlay with sdkconfig.activity.local.
+# Set the router channel and consented Wi-Fi MACs in menuconfig.
+CONFIG_DEVICE_ACTIVITY_FIXED_CHANNEL=y
+CONFIG_DEVICE_ACTIVITY_CHANNEL=6

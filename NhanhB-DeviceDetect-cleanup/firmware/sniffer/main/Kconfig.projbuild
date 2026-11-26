@@ -1,0 +1,52 @@
+menu "WiFi research sniffer"
+config PROBE_COUNTRY
+    string "Country code (e.g. VN; local channel policy)"
+    default "VN"
+
+choice SNIFFER_MODE
+    prompt "Capture mode"
+    default PROBE_BASELINE
+
+config PROBE_BASELINE
+    bool "Probe Request baseline (JSONL v1)"
+
+config DEVICE_ACTIVITY_FIXED_CHANNEL
+    bool "DEVICE_ACTIVITY_FIXED_CHANNEL (JSONL v2)"
+
+endchoice
+
+if DEVICE_ACTIVITY_FIXED_CHANNEL
+config DEVICE_ACTIVITY_CHANNEL
+    int "Fixed router primary channel"
+    range 1 13
+    default 6
+    help
+        Set the router's 2.4 GHz primary channel. Startup checks the selected
+        country's permitted channel range. Used when no valid NVS settings exist.
+
+config DEVICE_ACTIVITY_REGISTERED_MACS
+    string "Registered MACs (comma-separated, no spaces, up to 16)"
+    default ""
+    help
+        Enter the consented devices' Wi-Fi MAC addresses for this network.
+        An empty list enables channel counters only. Used only as the fallback before runtime configuration is saved.
+endif
+
+if PROBE_BASELINE
+config PROBE_HOPPING
+    bool "Hop channels (otherwise fixed channel)"
+    default y
+config PROBE_LAST_CHANNEL
+    int "Last channel (configure for local country policy)"
+    range 1 13
+    default 13
+config PROBE_FIXED_CHANNEL
+    int "Fixed / first channel"
+    range 1 11
+    default 6
+config PROBE_DWELL_MS
+    int "Channel dwell milliseconds"
+    range 100 10000
+    default 3000
+endif
+endmenu

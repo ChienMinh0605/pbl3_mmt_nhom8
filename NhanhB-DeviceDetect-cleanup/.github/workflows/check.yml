@@ -1,0 +1,39 @@
+name: Verify WiFi Device Sherlock
+on: [push, pull_request]
+jobs:
+  software:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend run build
+  firmware:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.5.4
+    strategy:
+      matrix:
+        include:
+          - profile: probe-hopping
+            defaults: sdkconfig.defaults
+          - profile: probe-fixed
+            defaults: sdkconfig.defaults;sdkconfig.fixed
+          - profile: device-activity
+            defaults: sdkconfig.defaults;sdkconfig.activity
+    name: Firmware · ${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        env:
+          SDKCONFIG_DEFAULTS: ${{ matrix.defaults }}
+        run: |
+          . /opt/esp/idf/export.sh
+          cd firmware/sniffer
+          idf.py -D "SDKCONFIG_DEFAULTS=$SDKCONFIG_DEFAULTS" build

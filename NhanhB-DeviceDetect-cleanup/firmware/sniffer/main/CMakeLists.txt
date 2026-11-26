@@ -1,0 +1,5 @@
+set(sniffer_sources "main.c")
+if(CONFIG_DEVICE_ACTIVITY_FIXED_CHANNEL)
+    list(APPEND sniffer_sources "activity_capture.c" "activity_frame.c")
+endif()
+idf_component_register(SRCS ${sniffer_sources} INCLUDE_DIRS "." "../../common" REQUIRES esp_wifi esp_event esp_netif nvs_flash esp_timer esp_driver_uart lwip esp_hw_support esp_app_format)

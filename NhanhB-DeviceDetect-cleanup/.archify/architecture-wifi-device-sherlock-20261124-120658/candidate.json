@@ -1,0 +1,361 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Kiến trúc WiFi Device Sherlock",
+    "locale": "vi",
+    "output": ".archify/architecture-wifi-device-sherlock-20261124-120658/wifi-device-sherlock.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/qphuc9405/NhanhB-DeviceDetect.git",
+      "revision": "064b9cd5ffef37f1a1508ff26380035fffcf5cf5",
+      "link_mode": "local-only"
+    }
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "sniffer",
+      "type": "external",
+      "label": "ESP32-C3 Sniffer",
+      "sublabel": "Thu Wi-Fi 2,4 GHz thụ động",
+      "sources": [
+        {
+          "path": "firmware/sniffer/main/main.c",
+          "line": 26,
+          "end_line": 39
+        },
+        {
+          "path": "firmware/sniffer/main/main.c",
+          "line": 112,
+          "end_line": 131
+        },
+        {
+          "path": "firmware/sniffer/main/activity_capture.c",
+          "line": 100,
+          "end_line": 122
+        }
+      ]
+    },
+    {
+      "id": "serial",
+      "type": "backend",
+      "label": "Thu nhận UART",
+      "sublabel": "ProbeService · một nguồn serial",
+      "sources": [
+        {
+          "path": "research/collector.py",
+          "line": 186,
+          "end_line": 219
+        },
+        {
+          "path": "research/collector.py",
+          "line": 68,
+          "end_line": 81
+        },
+        {
+          "path": "research/collector.py",
+          "line": 123,
+          "end_line": 135
+        }
+      ]
+    },
+    {
+      "id": "activity",
+      "type": "backend",
+      "label": "Q1 · Hoạt động thiết bị",
+      "sublabel": "Thiết bị đăng ký · frame/s · RSSI",
+      "sources": [
+        {
+          "path": "research/collector.py",
+          "line": 96,
+          "end_line": 117
+        },
+        {
+          "path": "research/device_activity.py",
+          "line": 20,
+          "end_line": 38
+        },
+        {
+          "path": "backend/app/api/device_activity.py",
+          "line": 98,
+          "end_line": 115
+        }
+      ]
+    },
+    {
+      "id": "probe",
+      "type": "backend",
+      "label": "Legacy · Sherlock",
+      "sublabel": "MAC xác nhận · unique-MAC · timeout",
+      "sources": [
+        {
+          "path": "research/collector.py",
+          "line": 73,
+          "end_line": 81
+        },
+        {
+          "path": "research/collector.py",
+          "line": 153,
+          "end_line": 178
+        },
+        {
+          "path": "backend/app/api/probe.py",
+          "line": 46,
+          "end_line": 62
+        }
+      ]
+    },
+    {
+      "id": "csi",
+      "type": "external",
+      "label": "Nguồn metadata CSI",
+      "sublabel": "Batch LIVE hoặc trace synthetic",
+      "sources": [
+        {
+          "path": "docs/implementation/CSI_RELIABILITY_DESIGN.md",
+          "line": 16,
+          "end_line": 25
+        },
+        {
+          "path": "backend/app/api/csi_reliability.py",
+          "line": 125,
+          "end_line": 137
+        },
+        {
+          "path": "backend/app/api/csi_quality.py",
+          "line": 34,
+          "end_line": 51
+        }
+      ]
+    },
+    {
+      "id": "quality",
+      "type": "backend",
+      "label": "Q2 · Chất lượng CSI",
+      "sublabel": "Đồng bộ · cửa sổ 1 s và 10 s",
+      "sources": [
+        {
+          "path": "research/csi_quality.py",
+          "line": 149,
+          "end_line": 160
+        },
+        {
+          "path": "research/csi_quality.py",
+          "line": 197,
+          "end_line": 233
+        },
+        {
+          "path": "backend/app/api/csi_quality.py",
+          "line": 34,
+          "end_line": 56
+        }
+      ]
+    },
+    {
+      "id": "reliability",
+      "type": "backend",
+      "label": "Q3 · Reliability",
+      "sublabel": "GOOD · DEGRADED · UNKNOWN",
+      "sources": [
+        {
+          "path": "backend/app/api/csi_reliability.py",
+          "line": 47,
+          "end_line": 88
+        },
+        {
+          "path": "backend/app/api/csi_reliability.py",
+          "line": 96,
+          "end_line": 156
+        },
+        {
+          "path": "research/csi_reliability.py",
+          "line": 69,
+          "end_line": 130
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "type": "database",
+      "label": "Lưu trữ cục bộ",
+      "sublabel": "SQLite · JSONL · metadata",
+      "sources": [
+        {
+          "path": "backend/app/storage.py",
+          "line": 9,
+          "end_line": 22
+        },
+        {
+          "path": "research/collector.py",
+          "line": 306,
+          "end_line": 322
+        },
+        {
+          "path": "research/collector.py",
+          "line": 119,
+          "end_line": 135
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "API JSON · phục vụ bản build React",
+      "sources": [
+        {
+          "path": "backend/app/main.py",
+          "line": 24,
+          "end_line": 49
+        },
+        {
+          "path": "backend/app/api/device_activity.py",
+          "line": 64,
+          "end_line": 84
+        },
+        {
+          "path": "scripts/serve.py",
+          "line": 20,
+          "end_line": 37
+        }
+      ]
+    },
+    {
+      "id": "dashboard",
+      "type": "frontend",
+      "label": "Dashboard React",
+      "sublabel": "Device & CSI · Legacy / Probe",
+      "sources": [
+        {
+          "path": "frontend/src/Dashboard.tsx",
+          "line": 1,
+          "end_line": 19
+        },
+        {
+          "path": "frontend/src/api.ts",
+          "line": 1,
+          "end_line": 7
+        },
+        {
+          "path": "frontend/src/device-csi/DeviceCsiPanel.tsx",
+          "line": 70,
+          "end_line": 91
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "uart",
+      "from": "sniffer",
+      "to": "serial",
+      "label": "UART JSONL v1 / v2",
+      "variant": "emphasis"
+    },
+    {
+      "id": "activity-v2",
+      "from": "serial",
+      "to": "activity",
+      "label": "v2 · Activity fixed"
+    },
+    {
+      "id": "probe-v1",
+      "from": "serial",
+      "to": "probe",
+      "label": "v1 · Probe"
+    },
+    {
+      "id": "serial-store",
+      "from": "serial",
+      "to": "storage",
+      "label": "Ghi phiên khi bật ghi"
+    },
+    {
+      "id": "upload",
+      "from": "csi",
+      "to": "quality",
+      "label": "Trace qua API",
+      "variant": "emphasis"
+    },
+    {
+      "id": "capture-replay",
+      "from": "storage",
+      "to": "quality",
+      "label": "Capture Q1 tùy chọn"
+    },
+    {
+      "id": "quality-outputs",
+      "from": "quality",
+      "to": "reliability",
+      "label": "Chỉ số theo cửa sổ",
+      "variant": "emphasis"
+    },
+    {
+      "id": "reliability-store",
+      "from": "reliability",
+      "to": "storage",
+      "label": "Đọc / ghi phiên CSI"
+    },
+    {
+      "id": "activity-output",
+      "from": "activity",
+      "to": "api",
+      "label": "Trạng thái Q1"
+    },
+    {
+      "id": "probe-output",
+      "from": "probe",
+      "to": "api",
+      "label": "Kết quả Sherlock"
+    },
+    {
+      "id": "reliability-output",
+      "from": "reliability",
+      "to": "api",
+      "label": "Nhãn · lý do · timeline",
+      "variant": "emphasis"
+    },
+    {
+      "id": "http-request",
+      "from": "dashboard",
+      "to": "api",
+      "label": "Yêu cầu HTTP"
+    },
+    {
+      "id": "http-response",
+      "from": "api",
+      "to": "dashboard",
+      "label": "HTML hoặc JSON",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Nguồn thu",
+      "items": [
+        "ESP32-C3 chạy firmware Probe v1 hoặc Device Activity v2. Q1 đối chiếu registry và đổi MAC đã đăng ký thành ID trước khi ghi capture.",
+        "CSI LIVE cần adapter ngoài gửi batch đã chuẩn hóa. Endpoint replay Q2 tiếp nhận trace tổng hợp, có thể kèm capture Q1 đã kết thúc."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Cách đọc kết quả",
+      "items": [
+        "Q2 tính tốc độ nhận, RSSI và tỷ lệ mất gói khi có đủ bằng chứng TX. Q3 dùng ngữ cảnh sniffer khi nguồn còn mới và khớp kênh, cửa sổ; thiếu ngữ cảnh thì dùng CSI-only.",
+        "Sherlock đếm nguồn MAC duy trì xác nhận. Dashboard có thêm ước lượng thiết bị trong phòng khi đủ dữ liệu và hiệu chuẩn."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Triển khai trên laptop",
+      "items": [
+        "FastAPI lắp router Probe và Q1–Q3 rồi phục vụ bản build React. Q2 và Q3 là các mô-đun Python cùng tiến trình.",
+        "SQLite lưu registry, metadata Probe, replay Q2 và phiên/batch Q3. File JSONL giữ bản ghi Probe cùng nhãn thử nghiệm, hoặc capture Q1 theo ID."
+      ]
+    }
+  ]
+}

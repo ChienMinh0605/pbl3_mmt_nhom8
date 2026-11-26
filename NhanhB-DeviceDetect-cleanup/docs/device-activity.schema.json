@@ -1,0 +1,799 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Device activity UART JSONL v2 record",
+  "$defs": {
+    "Channel": {
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "const": 2,
+          "title": "V",
+          "type": "integer"
+        },
+        "node": {
+          "const": "sniffer",
+          "title": "Node",
+          "type": "string"
+        },
+        "boot_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Boot Id",
+          "type": "string"
+        },
+        "ts_us": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Ts Us",
+          "type": "integer"
+        },
+        "seq": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "channel": {
+          "maximum": 13,
+          "minimum": 1,
+          "title": "Channel",
+          "type": "integer"
+        },
+        "registry_revision": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Registry Revision"
+        },
+        "mode": {
+          "const": "DEVICE_ACTIVITY_FIXED_CHANNEL",
+          "title": "Mode",
+          "type": "string"
+        },
+        "scan_mode": {
+          "const": "fixed",
+          "title": "Scan Mode",
+          "type": "string"
+        },
+        "type": {
+          "const": "channel",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "node",
+        "boot_id",
+        "ts_us",
+        "seq",
+        "channel",
+        "mode",
+        "scan_mode",
+        "type"
+      ],
+      "title": "Channel",
+      "type": "object"
+    },
+    "ConfigReply": {
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "const": 2,
+          "title": "V",
+          "type": "integer"
+        },
+        "node": {
+          "const": "sniffer",
+          "title": "Node",
+          "type": "string"
+        },
+        "type": {
+          "const": "config_reply",
+          "title": "Type",
+          "type": "string"
+        },
+        "boot_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Boot Id",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z_]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "registry_revision": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Registry Revision",
+          "type": "integer"
+        },
+        "channel": {
+          "maximum": 13,
+          "minimum": 1,
+          "title": "Channel",
+          "type": "integer"
+        },
+        "registered_devices": {
+          "maximum": 16,
+          "minimum": 0,
+          "title": "Registered Devices",
+          "type": "integer"
+        },
+        "macs": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^(?:[0-9a-f][02468ace]:)(?:[0-9a-f]{2}:){4}[0-9a-f]{2}$",
+                "type": "string"
+              },
+              "maxItems": 16,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Macs"
+        },
+        "runtime_config": {
+          "default": false,
+          "title": "Runtime Config",
+          "type": "boolean"
+        },
+        "channel_min": {
+          "anyOf": [
+            {
+              "maximum": 13,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel Min"
+        },
+        "channel_max": {
+          "anyOf": [
+            {
+              "maximum": 13,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel Max"
+        }
+      },
+      "required": [
+        "v",
+        "node",
+        "type",
+        "boot_id",
+        "request_id",
+        "ok",
+        "registry_revision",
+        "channel",
+        "registered_devices"
+      ],
+      "title": "ConfigReply",
+      "type": "object"
+    },
+    "RegisteredSample": {
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "const": 2,
+          "title": "V",
+          "type": "integer"
+        },
+        "node": {
+          "const": "sniffer",
+          "title": "Node",
+          "type": "string"
+        },
+        "boot_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Boot Id",
+          "type": "string"
+        },
+        "ts_us": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Ts Us",
+          "type": "integer"
+        },
+        "seq": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "channel": {
+          "maximum": 13,
+          "minimum": 1,
+          "title": "Channel",
+          "type": "integer"
+        },
+        "registry_revision": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Registry Revision"
+        },
+        "type": {
+          "const": "activity_sample",
+          "title": "Type",
+          "type": "string"
+        },
+        "frame_kind": {
+          "enum": [
+            "management",
+            "control",
+            "data"
+          ],
+          "title": "Frame Kind",
+          "type": "string"
+        },
+        "duration_us": {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Duration Us",
+          "type": "integer"
+        },
+        "n_frames": {
+          "exclusiveMinimum": 0,
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "N Frames",
+          "type": "integer"
+        },
+        "n_bytes": {
+          "maximum": 4294967295,
+          "minimum": 4,
+          "title": "N Bytes",
+          "type": "integer"
+        },
+        "tx_frames": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Tx Frames",
+          "type": "integer"
+        },
+        "rx_frames": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Rx Frames",
+          "type": "integer"
+        },
+        "block_ack_frames": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Block Ack Frames",
+          "type": "integer"
+        },
+        "rssi_max_dbm": {
+          "maximum": 127,
+          "minimum": -128,
+          "title": "Rssi Max Dbm",
+          "type": "integer"
+        },
+        "attribution": {
+          "const": "registered",
+          "title": "Attribution",
+          "type": "string"
+        },
+        "source_mac": {
+          "pattern": "^(?:[0-9a-f][02468ace]:)(?:[0-9a-f]{2}:){4}[0-9a-f]{2}$",
+          "title": "Source Mac",
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "node",
+        "boot_id",
+        "ts_us",
+        "seq",
+        "channel",
+        "type",
+        "frame_kind",
+        "duration_us",
+        "n_frames",
+        "n_bytes",
+        "tx_frames",
+        "rx_frames",
+        "block_ack_frames",
+        "rssi_max_dbm",
+        "attribution",
+        "source_mac"
+      ],
+      "title": "RegisteredSample",
+      "type": "object"
+    },
+    "Status": {
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "const": 2,
+          "title": "V",
+          "type": "integer"
+        },
+        "node": {
+          "const": "sniffer",
+          "title": "Node",
+          "type": "string"
+        },
+        "boot_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Boot Id",
+          "type": "string"
+        },
+        "ts_us": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Ts Us",
+          "type": "integer"
+        },
+        "seq": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "channel": {
+          "maximum": 13,
+          "minimum": 1,
+          "title": "Channel",
+          "type": "integer"
+        },
+        "registry_revision": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Registry Revision"
+        },
+        "mode": {
+          "const": "DEVICE_ACTIVITY_FIXED_CHANNEL",
+          "title": "Mode",
+          "type": "string"
+        },
+        "scan_mode": {
+          "const": "fixed",
+          "title": "Scan Mode",
+          "type": "string"
+        },
+        "type": {
+          "const": "status",
+          "title": "Type",
+          "type": "string"
+        },
+        "capture_active": {
+          "const": true,
+          "title": "Capture Active",
+          "type": "boolean"
+        },
+        "registered_devices": {
+          "maximum": 16,
+          "minimum": 0,
+          "title": "Registered Devices",
+          "type": "integer"
+        },
+        "rx_callbacks": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Rx Callbacks",
+          "type": "integer"
+        },
+        "invalid_frames": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Invalid Frames",
+          "type": "integer"
+        },
+        "off_channel_frames": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Off Channel Frames",
+          "type": "integer"
+        },
+        "unattributed_frames": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Unattributed Frames",
+          "type": "integer"
+        },
+        "unregistered_frames": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Unregistered Frames",
+          "type": "integer"
+        },
+        "serial_errors": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Serial Errors",
+          "type": "integer"
+        },
+        "bytes_written": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Bytes Written",
+          "type": "integer"
+        },
+        "serial_baud": {
+          "const": 460800,
+          "title": "Serial Baud",
+          "type": "integer"
+        },
+        "firmware_version": {
+          "anyOf": [
+            {
+              "maxLength": 31,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Firmware Version"
+        },
+        "management_frames": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Management Frames"
+        },
+        "data_frames": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Frames"
+        },
+        "control_frames": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Control Frames"
+        },
+        "queue_drops": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queue Drops"
+        },
+        "runtime_config": {
+          "default": false,
+          "title": "Runtime Config",
+          "type": "boolean"
+        },
+        "channel_min": {
+          "anyOf": [
+            {
+              "maximum": 13,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel Min"
+        },
+        "channel_max": {
+          "anyOf": [
+            {
+              "maximum": 13,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel Max"
+        }
+      },
+      "required": [
+        "v",
+        "node",
+        "boot_id",
+        "ts_us",
+        "seq",
+        "channel",
+        "mode",
+        "scan_mode",
+        "type",
+        "capture_active",
+        "registered_devices",
+        "rx_callbacks",
+        "invalid_frames",
+        "off_channel_frames",
+        "unattributed_frames",
+        "unregistered_frames",
+        "serial_errors",
+        "bytes_written",
+        "serial_baud"
+      ],
+      "title": "Status",
+      "type": "object"
+    },
+    "UnattributedSample": {
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "const": 2,
+          "title": "V",
+          "type": "integer"
+        },
+        "node": {
+          "const": "sniffer",
+          "title": "Node",
+          "type": "string"
+        },
+        "boot_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Boot Id",
+          "type": "string"
+        },
+        "ts_us": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Ts Us",
+          "type": "integer"
+        },
+        "seq": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "channel": {
+          "maximum": 13,
+          "minimum": 1,
+          "title": "Channel",
+          "type": "integer"
+        },
+        "registry_revision": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Registry Revision"
+        },
+        "type": {
+          "const": "activity_sample",
+          "title": "Type",
+          "type": "string"
+        },
+        "frame_kind": {
+          "enum": [
+            "management",
+            "control",
+            "data",
+            "misc"
+          ],
+          "title": "Frame Kind",
+          "type": "string"
+        },
+        "duration_us": {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Duration Us",
+          "type": "integer"
+        },
+        "n_frames": {
+          "exclusiveMinimum": 0,
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "N Frames",
+          "type": "integer"
+        },
+        "n_bytes": {
+          "maximum": 4294967295,
+          "minimum": 4,
+          "title": "N Bytes",
+          "type": "integer"
+        },
+        "tx_frames": {
+          "const": 0,
+          "title": "Tx Frames",
+          "type": "integer"
+        },
+        "rx_frames": {
+          "const": 0,
+          "title": "Rx Frames",
+          "type": "integer"
+        },
+        "block_ack_frames": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Block Ack Frames",
+          "type": "integer"
+        },
+        "rssi_max_dbm": {
+          "maximum": 127,
+          "minimum": -128,
+          "title": "Rssi Max Dbm",
+          "type": "integer"
+        },
+        "attribution": {
+          "const": "unattributed",
+          "title": "Attribution",
+          "type": "string"
+        },
+        "source_mac": {
+          "title": "Source Mac",
+          "type": "null"
+        }
+      },
+      "required": [
+        "v",
+        "node",
+        "boot_id",
+        "ts_us",
+        "seq",
+        "channel",
+        "type",
+        "frame_kind",
+        "duration_us",
+        "n_frames",
+        "n_bytes",
+        "tx_frames",
+        "rx_frames",
+        "block_ack_frames",
+        "rssi_max_dbm",
+        "attribution",
+        "source_mac"
+      ],
+      "title": "UnattributedSample",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "activity_sample": {
+        "discriminator": {
+          "mapping": {
+            "registered": "#/$defs/RegisteredSample",
+            "unattributed": "#/$defs/UnattributedSample"
+          },
+          "propertyName": "attribution"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/RegisteredSample"
+          },
+          {
+            "$ref": "#/$defs/UnattributedSample"
+          }
+        ]
+      },
+      "channel": "#/$defs/Channel",
+      "config_reply": "#/$defs/ConfigReply",
+      "status": "#/$defs/Status"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "discriminator": {
+        "mapping": {
+          "registered": "#/$defs/RegisteredSample",
+          "unattributed": "#/$defs/UnattributedSample"
+        },
+        "propertyName": "attribution"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RegisteredSample"
+        },
+        {
+          "$ref": "#/$defs/UnattributedSample"
+        }
+      ]
+    },
+    {
+      "$ref": "#/$defs/Status"
+    },
+    {
+      "$ref": "#/$defs/Channel"
+    },
+    {
+      "$ref": "#/$defs/ConfigReply"
+    }
+  ]
+}

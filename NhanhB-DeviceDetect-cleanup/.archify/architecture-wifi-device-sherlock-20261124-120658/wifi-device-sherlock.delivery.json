@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "9ff74381-a243-412e-920c-b7d0cb4ee78c",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/home/phuc/PBL3/NhanhB-DeviceDetect-cleanup/.archify/architecture-wifi-device-sherlock-20261124-120658/candidate.json",
+  "output": "/home/phuc/PBL3/NhanhB-DeviceDetect-cleanup/.archify/architecture-wifi-device-sherlock-20261124-120658/wifi-device-sherlock.html",
+  "specification": {
+    "sha256": "bdb3f8933232b0a210d93090d304a41f87272caabd42aef2019636ebf139c32d",
+    "bytes": 9022
+  },
+  "artifact": {
+    "sha256": "7bf70b2370def553b36a8fd259b8ee74461d144e2d72619d55794da2b3573ec9",
+    "bytes": 951375
+  }
+}
