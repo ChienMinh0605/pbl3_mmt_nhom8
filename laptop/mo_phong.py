@@ -8,20 +8,28 @@ Muốn xem hình động, chọn kịch bản bằng giao diện: python mo_phon
 Ví dụ:
     python mo_phong.py --tag sim1 --hinh                        # kịch bản 1 người (~7 phút), có ảnh
     python mo_phong.py --tag dong --kich-ban nhieu-nguoi --hinh # khách vào / ra
-    python mo_phong.py --tag nga --plan "EMPTY:10,ACTIVE:20,FALL,DOWN:40,STAND_UP,ACTIVE:10"
+    python mo_phong.py --tag nga --plan "EMPTY:10,ACTIVE:20,FALL,DOWN:40@18~,STAND_UP,ACTIVE:10"
+    python mo_phong.py --tag yen --kich-ban bat-dong            # ngồi / nằm yên 4 và 7 phút (cảnh báo bất động lâu)
+    python mo_phong.py --tag kenh --nhieu "wifi@60:30,khac@200:3"   # ép thêm đợt nhiễu ("tat,..." = bỏ đợt ngẫu nhiên)
     python mo_phong.py --tag demo --phat-lai                    # ghi theo thời gian thực
     python mo_phong.py --tag ngaunhien --so-buoi 20             # 20 buổi kịch bản ngẫu nhiên (~5 phút mỗi buổi)
+    python mo_phong.py --tag lau --so-buoi 20 --yen-lau 0.3     # 30 % số buổi có một đoạn yên 4–8 phút
     python mo_phong.py --tag x --nguoi-bam --hinh               # có người bấm phím ngồi trong phòng
 
 Kịch bản (--plan), các mục cách nhau bằng dấu phẩy:
     TRẠNG_THÁI:giây[@nhịp]   EMPTY, NEIGHBOR, ACTIVE, STILL, DOWN, BREATH_ABN
                              @nhịp = nhịp thở/phút cho STILL, DOWN, BREATH_ABN (0 = nín thở)
+    DOWN:giây[@nhịp]~        nằm sau ngã nhưng cử động tại chỗ: giãy tay chân, lăn / xoay, cố nhổm dậy rồi tụt lại,
+                             không đứng lên được (nhãn vẫn STATE DOWN, thêm NOTE "DOWN cu-dong")
     ĐỘNG_TÁC[:giây]          FALL, SIT_DOWN, STAND_UP, LIE_DOWN, PICK_UP (bỏ trống = ngẫu nhiên trong khoảng ở ACTIONS)
     + hoặc -                 một khách vào / ra (tối đa 2 khách, tổng 3 người)
 Nhãn STATE, ACTION, COUNT, RATE được ghi tự động vào labels.csv như người bấm phím: trễ 0–0,8 giây (trung bình 0,3)
-so với lúc việc xảy ra thật. Thời điểm thật ghi trong meta.json → simulator.truth để chấm thuật toán.
+so với lúc việc xảy ra thật. Thời điểm thật (giây tính từ đầu mô phỏng) ghi trong meta.json → simulator: truth (mọi
+đoạn), down_cu_dong (các đoạn DOWN~), interference (các đợt nhiễu); t0_host = host_time của giây 0 để đổi sang host_time.
 Để tránh "kết quả đẹp ảo": mỗi lần động tác có thời lượng, biên độ khác nhau; nhịp và độ sâu thở dao động nhẹ;
-ngồi yên lâu thì thỉnh thoảng xê dịch vài cm (riêng DOWN – nằm sau ngã – là bất động).
+ngồi yên lâu thì thỉnh thoảng xê dịch vài cm; DOWN bất động, DOWN~ cử động từng đợt (~35 % lần ngã ở --so-buoi).
+Đợt nhiễu chen ngang (interference_for): "wifi" – máy khác chiếm kênh CSI: STAT n_filtered 50–400 khung/giây (thường
+0–5), mất 5–40 % gói, nhiễu CSI ×1,5, 1–3 % gói hỏng; "khac" – lò vi sóng…: noise_floor -95 → -85, nhiễu ×3, mất 30 %.
 
 Mô hình kênh 3D (phương pháp ảnh trong phòng hộp chữ nhật):
 - Phòng 4 × 3,5 × 2,8 m: tường, sàn bê tông, trần thạch cao (εr, σ theo ITU-R P.2040-2, Bảng 3). Góc (0, 0) là góc demo
@@ -38,7 +46,9 @@ Mô hình kênh 3D (phương pháp ảnh trong phòng hộp chữ nhật):
   biên độ phòng trống ~15; 52 sóng mang con (len 104, thứ tự -26..-1, 1..26); pha mỗi gói lệch ngẫu nhiên; lượng tử
   int8; mất gói trên không (rx_seq nhảy) và mất dòng trên USB (seq nhảy); rx_seq 12 bit quay vòng.
 - Tham số phần cứng và độ mạnh tán xạ đã hiệu chỉnh theo CSI thật của WiFall (doi_chieu_wifall.py).
-Chưa có: phản xạ bậc ≥ 3; người che phản xạ bậc 2 và sóng dội từ người khác; chuyển động chi tiết của từng khớp.
+Chưa có: phản xạ bậc ≥ 3; người che phản xạ bậc 2 và sóng dội từ người khác; chuyển động chi tiết của từng khớp
+(DOWN~ chỉ dịch 6 điểm tay chân và độ cao thân). Hệ quả: giãy tay chân sát sàn chỉ hơi nổi trên nhiễu ESP32, rõ nhất là
+lúc cố nhổm dậy.
 Mô hình để thử luồng xử lý – không thay dữ liệu thật và không dùng để báo cáo độ chính xác.
 """
 import argparse
@@ -64,6 +74,7 @@ ACTIONS = {"FALL": (0.8, 1.6), "SIT_DOWN": (1.2, 2.4), "STAND_UP": (1.3, 2.6), "
            "PICK_UP": (1.6, 3.0)}
 assert set(ACTIONS) == set(ACTION_NAMES), "động tác trong mô phỏng phải khớp nhan.py"
 BREATHING = ("STILL", "DOWN", "BREATH_ABN")
+NHIEU = ("wifi", "khac")                  # loại đợt nhiễu chen ngang, xem interference_for
 
 KICH_BAN = {
     "mot-nguoi": "EMPTY:20,ACTIVE:30,SIT_DOWN,STILL:40@14,STAND_UP,ACTIVE:15,PICK_UP,ACTIVE:15,LIE_DOWN,"
@@ -74,6 +85,9 @@ KICH_BAN = {
     "nga": "EMPTY:15,ACTIVE:20,FALL,DOWN:40,STAND_UP,ACTIVE:15,SIT_DOWN,STAND_UP,ACTIVE:10,LIE_DOWN,STILL:20,"
            "STAND_UP,ACTIVE:10,PICK_UP,ACTIVE:10,FALL,DOWN:30,STAND_UP,ACTIVE:10,EMPTY:15",
     "phong-ben": "EMPTY:30,NEIGHBOR:60,EMPTY:30",
+    # cảnh báo bất động lâu (ngưỡng demo 5 phút): một lần nằm yên 4 phút (không được báo), một lần ngồi yên 7 phút
+    "bat-dong": "EMPTY:15,ACTIVE:30,LIE_DOWN,STILL:240@12,STAND_UP,ACTIVE:30,SIT_DOWN,STILL:420@14,STAND_UP,ACTIVE:20,"
+                "EMPTY:15",
 }
 
 # ---- hình học (m)
@@ -120,7 +134,8 @@ def parse_plan(text):
         if part in ("+", "-"):
             items.append((part, 0.0, None))
             continue
-        name, _, rest = part.partition(":")
+        moving = part.endswith("~")                                            # DOWN~: nằm sau ngã có cử động
+        name, _, rest = part.rstrip("~").partition(":")
         name = name.upper()
         dur, _, bpm = rest.partition("@")
         try:
@@ -130,23 +145,29 @@ def parse_plan(text):
             dur = None
         bad_bpm = bpm is not None and (name not in BREATHING or not 0 <= bpm <= 60)
         bad_dur = dur is None and name not in ACTIONS or dur is not None and not 0 < dur <= 3600
-        if name not in STATES and name not in ACTIONS or bad_dur or bad_bpm:
-            sys.exit(f"--plan sai ở '{part}'. Dạng: TRẠNG_THÁI:giây[@nhịp], ĐỘNG_TÁC[:giây], + hoặc -.\n"
+        if name not in STATES and name not in ACTIONS or bad_dur or bad_bpm or moving and name != "DOWN":
+            sys.exit(f"--plan sai ở '{part}'. Dạng: TRẠNG_THÁI:giây[@nhịp][~], ĐỘNG_TÁC[:giây], + hoặc -.\n"
                      f"Trạng thái: {', '.join(STATES)}. Động tác: {', '.join(ACTIONS)}. "
-                     f"@nhịp (0–60) chỉ dùng cho {', '.join(BREATHING)}.")
-        items.append((name, dur, bpm))
+                     f"@nhịp (0–60) chỉ dùng cho {', '.join(BREATHING)}; ~ (cử động tại chỗ) chỉ dùng cho DOWN.")
+        items.append((name + "~" * moving, dur, bpm))                          # giữ "DOWN~" để timeline biết
     return items
 
 
-def random_plan(rng, minutes=5.0, guests=False):
-    """Kịch bản ngẫu nhiên hợp lệ: đi lại, ngồi, cúi, nằm, ngã (khá thường xuyên), thở thường / bất thường;
-    guests=True: có 1–2 khách vào ra giữa chừng."""
+def random_plan(rng, minutes=5.0, guests=False, long_still=False):
+    """Kịch bản ngẫu nhiên hợp lệ: đi lại, ngồi, cúi, nằm, ngã (khá thường xuyên; ~35 % lần ngã người còn cử động tại
+    chỗ – DOWN~), thở thường / bất thường; guests=True: có 1–2 khách vào ra giữa chừng; long_still=True: lần ngồi / nằm
+    đầu tiên yên liền 4–8 phút (thử cảnh báo bất động lâu)."""
     out = [f"EMPTY:{rng.integers(10, 31)}", f"ACTIVE:{rng.integers(10, 31)}"]
     posture, n_guest = "stand", 0
     length = lambda: sum(float(x.split(":")[1].split("@")[0]) for x in out if ":" in x)
     pick = lambda opts: opts[0][rng.choice(len(opts[0]), p=opts[1])]
+    down = lambda: f"DOWN:{rng.integers(20, 61)}@{rng.integers(10, 23)}" + "~" * (rng.random() < 0.35)
 
     def rest(still=True):
+        nonlocal long_still
+        if still and long_still:
+            long_still = False
+            return f"STILL:{rng.integers(240, 481)}@{rng.integers(10, 23)}"
         if still and rng.random() < 0.8:
             return f"STILL:{rng.integers(15, 61)}@{rng.integers(10, 23)}"
         return f"BREATH_ABN:{rng.integers(15, 41)}@{rng.choice([0, 6, 32, 38])}"
@@ -168,7 +189,7 @@ def random_plan(rng, minutes=5.0, guests=False):
             elif c == "PICK_UP":
                 out += ["PICK_UP", f"ACTIVE:{rng.integers(5, 15)}"]
             elif c == "FALL":
-                out += ["FALL", f"DOWN:{rng.integers(20, 61)}@{rng.integers(10, 23)}"]
+                out += ["FALL", down()]
                 if rng.random() < 0.3:
                     out.append(rest(still=False))
                 posture = "lie"
@@ -178,7 +199,7 @@ def random_plan(rng, minutes=5.0, guests=False):
         elif posture == "sit":
             c = pick((["STAND_UP", "LIE_DOWN", "FALL"], [0.6, 0.25, 0.15]))
             if c == "FALL":
-                out += ["FALL", f"DOWN:{rng.integers(20, 61)}@{rng.integers(10, 23)}"]
+                out += ["FALL", down()]
                 posture = "lie"
             elif c == "LIE_DOWN":
                 out += ["LIE_DOWN", rest()]
@@ -191,8 +212,17 @@ def random_plan(rng, minutes=5.0, guests=False):
             posture = "stand"
     if posture != "stand":
         out += ["STAND_UP", f"ACTIVE:{rng.integers(5, 16)}"]
+    if long_still:                                            # cả buổi chưa ngồi / nằm lần nào: thêm ở cuối
+        out += ["SIT_DOWN", rest(), "STAND_UP", f"ACTIVE:{rng.integers(5, 16)}"]
     out.append(f"EMPTY:{rng.integers(10, 21)}")
     return ",".join(out)
+
+
+def down_cu_dong(plan, spans):
+    """[[giây đầu, giây cuối]] các đoạn DOWN~ (cùng mốc với spans / simulator.truth). Mỗi mục kịch bản trừ +/- sinh
+    đúng một đoạn trong spans, theo thứ tự."""
+    names = [n for n, _, _ in parse_plan(plan) if n not in ("+", "-")]
+    return [[round(a, 3), round(b, 3)] for n, (_, a, b) in zip(names, spans) if n == "DOWN~"]
 
 
 def walk(rng, area, n, dt, start, end=None, pause=(0.4, 2.0)):
@@ -267,6 +297,34 @@ def fidget(rng, n):
     return np.convolve(rng.normal(0, 0.0173, n + 299), np.ones(300) / 300, "valid")
 
 
+def struggle(rng, n, dt, yaw0):
+    """DOWN~ – ngã rồi không tự dậy được nhưng còn cử động: từng đợt 1–5 s, nghỉ 2–12 s. Mỗi đợt tay chân giãy 3–20 cm
+    (0,5–2 lần/giây); ~25 % đợt kèm lăn / xoay người (chỗ nằm dịch ngang tối đa 30 cm, hướng thân đổi tới ±45°); ~25 % đợt
+    kèm cố nhổm dậy (h lên 0,2–0,35 rồi tụt về 0). Không bao giờ đứng lên. Số liệu là giá trị khởi đầu ước lượng theo
+    mô tả người ngã không tự dậy được (chưa có số đo); có buổi thu thật thì chỉnh lại.
+    Trả về độ dịch tay chân (n, 6: đùi, cẳng chân, tay), độ nhổm h (n,), độ xoay thân (n,), độ dịch chỗ nằm (n, 2)."""
+    limb, rise, turn, shift = np.zeros((n, 6)), np.zeros(n), np.zeros(n), np.zeros((n, 2))
+    k = int(rng.uniform(0.5, 3) / dt)
+    while k < n:
+        T = rng.uniform(1, 5)
+        m = min(int(T / dt), n - k)
+        env = np.sin(np.pi * np.arange(m) * dt / T)
+        tt = np.arange(m)[:, None] * dt
+        limb[k:k + m] = env[:, None] * rng.uniform(0.03, 0.2, 6) * np.sin(
+            2 * np.pi * rng.uniform(0.5, 2, 6) * tt + rng.uniform(0, 2 * np.pi, 6))
+        c = rng.random()
+        if c < 0.25:                                                  # lăn / xoay người, nằm luôn ở chỗ mới
+            ramp = (1 - np.cos(np.pi * np.minimum(np.arange(n - k) * dt / T, 1))) / 2
+            side = rng.choice([-1, 1]) * np.array([-np.sin(yaw0 + turn[k]), np.cos(yaw0 + turn[k])])
+            # chậm hơn 0,1 m/s: body_points vẫn lấy hướng thân theo yaw (nhanh hơn thì coi là đang đi)
+            shift[k:] += np.outer(ramp, side * min(rng.uniform(0.1, 0.3), 0.06 * T))
+            turn[k:] += ramp * rng.uniform(-0.8, 0.8)
+        elif c < 0.5:                                                 # cố nhổm dậy rồi tụt lại
+            rise[k:k + m] = rng.uniform(0.2, 0.35) * env
+        k += m + int(rng.uniform(2, 12) / dt)
+    return limb, rise, turn, shift
+
+
 def timeline(items, rate, rng, operator=False):
     """Dựng chuyển động của mọi người theo kịch bản, mỗi mẫu CSI một điểm.
 
@@ -278,6 +336,7 @@ def timeline(items, rate, rng, operator=False):
     N = sum(lens)
     S = {k: np.zeros((N, N_PERSON)) for k in ("x", "y", "yaw", "breath")}
     S["h"] = np.ones((N, N_PERSON))
+    S["limb"] = np.zeros((N, N_PERSON, 6))                                       # tay chân giãy (DOWN~)
     S["present"] = np.zeros((N, N_PERSON), bool)
     S["behind"] = np.zeros((N, N_PERSON), bool)
     labels, spans = [], []
@@ -285,6 +344,7 @@ def timeline(items, rate, rng, operator=False):
     guests, open_guest, i = [], [], 0          # khách: [slot, mẫu vào, mẫu ra]
     fail = lambda k, msg: sys.exit(f"--plan mục {k + 1} ('{items[k][0]}'): {msg}")
     for k, ((name, _, bpm), n) in enumerate(zip(items, lens)):
+        moving, name = name == "DOWN~", name.rstrip("~")                         # nhãn, đoạn đáp án vẫn là DOWN
         a, sl = i * dt, slice(i, i + n)
         if name == "+":
             free = [g for g in (1, 2) if g not in [x[0] for x in open_guest]]
@@ -328,11 +388,18 @@ def timeline(items, rate, rng, operator=False):
                 fail(k, "DOWN là nằm sau ngã, cần FALL (hoặc LIE_DOWN) trước")
             if bpm is None:
                 bpm = 35.0 if name == "BREATH_ABN" else float(rng.integers(12, 21))
-            shift = adjust(rng, n, dt) if name == "STILL" else np.zeros((n, 2))  # DOWN: bất động thật sự
+            shift, rise, turn = np.zeros((n, 2)), np.zeros(n), np.zeros(n)  # DOWN: bất động thật sự
+            if name == "STILL":
+                shift = adjust(rng, n, dt)
+            elif moving:
+                p["limb"][:], rise, turn, shift = struggle(rng, n, dt, lie_yaw)
+                shift = away_from_devices(np.clip(pos + shift, 0.2, [ROOM[0] - 0.2, ROOM[1] - 0.2])) - pos
+                labels.append((a, "NOTE", "DOWN cu-dong"))
             p["x"][:], p["y"][:] = pos[0] + shift[:, 0] + fidget(rng, n), pos[1] + shift[:, 1] + fidget(rng, n)
             pos = pos + shift[-1]
-            p["h"][:] = {"stand": STAND, "sit": SIT, "lie": 0.0}[posture]
-            p["yaw"][:], p["breath"][:], p["present"][:] = lie_yaw, breath_wave(rng, n, dt, bpm), True
+            p["h"][:] = {"stand": STAND, "sit": SIT, "lie": 0.0}[posture] + rise
+            p["yaw"][:], p["breath"][:], p["present"][:] = lie_yaw + turn, breath_wave(rng, n, dt, bpm), True
+            lie_yaw += turn[-1]
             labels.append((a, "RATE", f"{bpm:g}"))
         else:                                                                   # động tác
             need = {"FALL": ("stand", "sit"), "SIT_DOWN": ("stand",), "PICK_UP": ("stand",),
@@ -479,13 +546,52 @@ def objects_for(seed):
     return out
 
 
-def bursts_for(seed, n, rate):
-    """Các đợt nhiễu chen ngang (Wi-Fi khác, lò vi sóng…): trung bình 1 đợt / 2 phút, mỗi đợt 1–4 s. Trả về mặt nạ (n,)."""
-    r = np.random.default_rng(seed + 54321)
-    m = np.zeros(n, dtype=bool)
-    for _ in range(r.poisson(n / rate / 120)):
-        a = int(r.uniform(0, n))
-        m[a:a + int(r.uniform(1, 4) * rate)] = True
+def parse_nhieu(text):
+    """--nhieu "wifi@60:30,khac@200:3" → (có đợt ngẫu nhiên không, [(loại, giây đầu, giây cuối)]); mục "tat" = bỏ
+    các đợt ngẫu nhiên."""
+    rand, out = True, []
+    for part in filter(None, (p.strip() for p in (text or "").split(","))):
+        if part == "tat":
+            rand = False
+            continue
+        kind, _, rest = part.partition("@")
+        a, _, d = rest.partition(":")
+        try:
+            a, d = float(a), float(d)
+        except ValueError:
+            a = d = -1.0
+        if kind not in NHIEU or not (0 <= a <= 86400 and 0 < d <= 3600):
+            sys.exit(f"--nhieu sai ở '{part}'. Dạng: loại@giây_bắt_đầu:thời_lượng, cách nhau bằng dấu phẩy "
+                     f"(loại: {', '.join(NHIEU)}); thêm 'tat' để bỏ các đợt ngẫu nhiên.")
+        out.append((kind, a, a + d))
+    return rand, out
+
+
+def interference_for(seed, n, rate, nhieu=None):
+    """Các đợt nhiễu chen ngang của buổi thu [(loại, giây đầu, giây cuối)]: ngẫu nhiên theo seed + các đợt ép bằng nhieu.
+    - "wifi": thiết bị Wi-Fi khác chiếm kênh CSI (tải dữ liệu…). Đợt ngắn như bản trước (1 đợt / 2 phút, 1–4 s) và đợt
+      dài 10–60 s, trung bình 1 đợt / 5 phút.
+    - "khac": nhiễu không phải Wi-Fi (lò vi sóng…): RX không giải mã được khung nào nên không đếm được.
+    Đợt ngắn 70 % là Wi-Fi vì trong nhà Wi-Fi khác cùng kênh gặp thường hơn lò vi sóng (giá trị khởi đầu, chưa đo)."""
+    r = np.random.default_rng(seed + 54321)                     # dòng ngẫu nhiên riêng: không đổi phần còn lại
+    rand, out = parse_nhieu(nhieu)
+    dur = n / rate
+    if rand:
+        for _ in range(r.poisson(dur / 120)):
+            a = r.uniform(0, dur)
+            out.append(("wifi" if r.random() < 0.7 else "khac", a, a + r.uniform(1, 4)))
+        for _ in range(r.poisson(dur / 300)):
+            a = r.uniform(0, dur)
+            out.append(("wifi", a, a + r.uniform(10, 60)))
+    return sorted(((k, round(a, 2), round(min(b, dur), 2)) for k, a, b in out if a < dur), key=lambda e: e[1])
+
+
+def burst_mask(t, bursts, kinds=NHIEU):
+    """Mặt nạ (N,) các mẫu nằm trong đợt nhiễu thuộc `kinds`."""
+    m = np.zeros(len(t), dtype=bool)
+    for k, a, b in bursts:
+        if k in kinds:
+            m |= (t >= a) & (t < b)
     return m
 
 
@@ -559,6 +665,8 @@ def body_points(t, S, dt):
     swing = 0.2 * np.sin(2 * np.pi * 0.9 * t)[:, None] * walking               # bước chân ~0,9 sải / giây
     loc[..., 3:7, 0] += np.stack([swing, -swing, swing, -swing], -1)          # chân trái / phải ngược pha
     loc[..., 7:9, 0] += np.stack([-0.7 * swing, 0.7 * swing], -1)              # tay vung ngược chân
+    loc[..., 3:9, 0] += S["limb"]                                             # DOWN~: tay chân giãy ...
+    loc[..., 3:9, 2] += np.abs(S["limb"])                                     # ... và nhấc khỏi sàn
     loc[..., 1, 0] += S["breath"]                                             # ngực, bụng phồng theo nhịp thở
     loc[..., 2, 0] += S["breath"]                                             # thở bụng: bụng phồng như ngực
     c, s_ = np.cos(head)[..., None], np.sin(head)[..., None]
@@ -613,10 +721,11 @@ def channel(rx, pts, s, scr, objects=FURNITURE, chunk=4000):
     return out, H0
 
 
-def like_esp32(H, H0, rng, noise, rate=100, burst=None):
+def like_esp32(H, H0, rng, noise, rate=100, noise_x=None, bad=None):
     """Thêm lỗi như phần cứng thật, lượng tử về int8. Trả về phần ảo, phần thực (N, 52) và RSSI (N,).
     AGC của ESP32 tự chỉnh khuếch đại theo công suất thu: bù một phần (AGC_ALPHA) sự đổi công suất, trễ ~AGC_TAU,
-    theo bậc 0,5 dB – nên khi người che sóng, biên độ CSI tụt ít hơn công suất thật và có bước nhảy chung."""
+    theo bậc 0,5 dB – nên khi người che sóng, biên độ CSI tụt ít hơn công suất thật và có bước nhảy chung.
+    noise_x: hệ số nhân nhiễu từng gói (đợt nhiễu); bad: mặt nạ gói CSI hỏng (chồng khung Wi-Fi khác)."""
     N, dt = len(H), 1 / rate
     power = np.mean(np.abs(H) ** 2, axis=1) / np.mean(np.abs(H0) ** 2)
     a = 1 - np.exp(-dt / AGC_TAU)
@@ -626,8 +735,11 @@ def like_esp32(H, H0, rng, noise, rate=100, burst=None):
     sto = rng.normal(0, 30e-9, N)[:, None]                                      # lệch thời điểm lấy mẫu → pha nghiêng
     phase = np.exp(1j * (rng.uniform(0, 2 * np.pi, N)[:, None] - 2 * np.pi * SUB * 312.5e3 * sto))
     z = H * (gain * LEVEL / np.median(np.abs(H0)))[:, None] * phase
-    sd = noise * LEVEL * (1 + 2 * (burst if burst is not None else np.zeros(N)))[:, None]   # đợt nhiễu: ×3
+    sd = noise * LEVEL * (noise_x if noise_x is not None else np.ones(N))[:, None]
     z = z + rng.normal(0, 1, z.shape) * sd + 1j * rng.normal(0, 1, z.shape) * sd
+    if bad is not None and bad.any():          # gói hỏng: cả gói to / nhỏ đi 2–4 lần, méo thêm theo sóng mang con
+        k = int(bad.sum())
+        z[bad] *= np.exp(rng.choice([-1, 1], (k, 1)) * rng.uniform(0.7, 1.4, (k, 1))) * rng.uniform(0.6, 1.4, (k, 52))
     q = lambda v: np.clip(np.round(v), -127, 127).astype(np.int8)
     rssi = np.round(-40 + 10 * np.log10(power) + rng.normal(0, 0.5, N)).astype(int)   # RSSI đo trước AGC
     return q(z.imag), q(z.real), rssi
@@ -641,11 +753,20 @@ def write_session(args, t, rx_data, labels, spans=None):
     rng = np.random.default_rng(args.seed + 1000)
     N, dur = len(t), float(t[-1]) + 1 / args.rate
     rx_seq = (np.arange(N) + int(rng.integers(4096))) % 4096                    # cùng gói → cùng rx_seq ở mọi RX
-    burst = bursts_for(args.seed, N, args.rate)
+    bursts = interference_for(args.seed, N, args.rate, args.nhieu)
+    # mỗi đợt Wi-Fi một độ bận kênh u: RX đếm 50–400 khung lạ/giây (n_filtered), gói của TX mất 5–40 % (TX phải nhường
+    # kênh, RX bận nhận khung khác) – bận hơn thì mất nhiều hơn. Lò vi sóng…: mất 30 % như bản trước, nâng noise_floor.
+    others, lost = np.zeros(N), np.full(N, 0.005)                               # lúc thường mất 0,5 % trên không
+    for kind, a, b in bursts:
+        m, u = (t >= a) & (t < b), rng.random()
+        if kind == "wifi":
+            others[m] += 50 + 350 * u
+        lost[m] = np.maximum(lost[m], 0.05 + 0.35 * u if kind == "wifi" else 0.3)
+    nf = np.where(burst_mask(t, bursts, ("khac",)), -85, -95)
     events = [(off, "labels", [ev, val]) for off, ev, val in labels]
     stats = {"lines": {"BOOT": 0, "CSI": 0, "PRB": 0, "STAT": 0}, "lost_by_seq": {}}
     for board, (im, re, rssi) in rx_data.items():
-        air = rng.random(N) > np.where(burst, 0.3, 0.005)                      # mất trên không; đợt nhiễu mất 30 %
+        air = rng.random(N) > lost                                              # mất trên không
         usb = rng.random(N) > 0.001                                             # mất trên USB: seq nhảy
         seq = np.cumsum(air)
         boot = rng.uniform(5, 60)
@@ -654,10 +775,11 @@ def write_session(args, t, rx_data, labels, spans=None):
         raw = np.stack([im, re], axis=-1).reshape(N, -1)
         for j in np.flatnonzero(air & usb):
             events.append((host[j], "csi", [board, int(seq[j]), int(t_us[j]), int(rx_seq[j]), MAC["TX"],
-                                            int(rssi[j]), -95, CHANNEL, 0, 0, 0, 104, raw[j].tobytes().hex()]))
+                                            int(rssi[j]), int(nf[j]), CHANNEL, 0, 0, 0, 104, raw[j].tobytes().hex()]))
         for sec in range(1, int(dur) + 1):
-            n_rx = int(np.sum(air[(t >= sec - 1) & (t < sec)]))
-            events.append((float(sec), "stat", [int((sec + boot) * 1e6), board, n_rx, int(rng.integers(0, 4)), 0,
+            w = (t >= sec - 1) & (t < sec)
+            n_filtered = int(rng.poisson(others[w].mean())) + int(rng.integers(0, 6))   # lúc thường 0–5 khung lạ
+            events.append((float(sec), "stat", [int((sec + boot) * 1e6), board, int(np.sum(air[w])), n_filtered, 0,
                                                CHANNEL]))
         for sec in range(0, int(dur), 30):
             events.append((sec + 0.01, "boot", [board, "sim-3d", MAC[board], MAC["TX"], CHANNEL]))
@@ -666,6 +788,7 @@ def write_session(args, t, rx_data, labels, spans=None):
         stats["lines"]["BOOT"] += len(range(0, int(dur), 30))
         stats["lost_by_seq"][f"{board}/CSI"] = int((air & ~usb).sum())
     events.sort(key=lambda e: e[0])
+    start = time.time()                                                         # host_time của giây 0 mô phỏng
     meta = {"session_id": sid, "room": "Mô phỏng 3D: góc phòng 4 x 3,5 x 2,8 m", "channel": CHANNEL,
             "tx_rx_distance_m": round(float(np.mean([np.linalg.norm(p - TX) for p in RX.values()])), 2),
             "members": [], "simulated": True, "ports": {"RX1": None, "RX2": None, "SNF": None}, "notes": "",
@@ -675,15 +798,17 @@ def write_session(args, t, rx_data, labels, spans=None):
                           "chair": CHAIR.tolist(), "room": list(ROOM), "area": list(AREA),
                           "operator": OPERATOR.tolist() if args.nguoi_bam else None,
                           "objects": [[list(q), s_] for q, s_ in objects_for(args.seed)],
-                          "bursts_s": round(float(burst.sum()) / args.rate, 1),
-                          "truth": [[n, round(a, 3), round(b, 3)] for n, a, b in spans or []]}}
+                          "nhieu": args.nhieu, "interference": [list(x) for x in bursts],
+                          "bursts_s": round(float(burst_mask(t, bursts).sum()) / args.rate, 1),
+                          "t0_host": round(start, 4),
+                          "truth": [[n, round(a, 3), round(b, 3)] for n, a, b in spans or []],
+                          "down_cu_dong": down_cu_dong(args.plan, spans or [])}}
     (d / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
     files = {k: open(d / f"{k}.csv", "w", newline="", encoding="utf-8") for k in FILES}
     writers = {k: csv.writer(f) for k, f in files.items()}
     for k, w in writers.items():
         w.writerow(FILES[k])
-    start = time.time()
     if args.phat_lai:
         print(f"Phát lại theo thời gian thực vào {d} (Ctrl+C để dừng).")
     last_flush = start
@@ -825,6 +950,10 @@ def main(argv=None):
                     help="có người bấm phím ngồi yên cạnh laptop suốt buổi (không tính vào COUNT)")
     ap.add_argument("--so-buoi", type=int, help="tạo N buổi với kịch bản ngẫu nhiên (tag-01, tag-02, ...)")
     ap.add_argument("--phut", type=float, default=5.0, help="độ dài mỗi buổi ngẫu nhiên, phút")
+    ap.add_argument("--yen-lau", type=float, default=0.0,
+                    help="với --so-buoi: tỉ lệ buổi (0–1) có một đoạn ngồi / nằm yên 4–8 phút; mặc định 0")
+    ap.add_argument("--nhieu", help='ép thêm đợt nhiễu, ví dụ "wifi@60:30,khac@200:3" (loại@giây bắt đầu:thời lượng; '
+                                    'loại wifi hoặc khac); thêm mục "tat" để bỏ các đợt ngẫu nhiên')
     args = ap.parse_args(argv)
     if not args.tag or not all(c.isascii() and c.isalnum() or c == "-" for c in args.tag):
         ap.error("--tag chỉ gồm chữ không dấu, số và '-'")
@@ -832,6 +961,9 @@ def main(argv=None):
         ap.error("--rate phải trong khoảng 10–1000")
     if args.so_buoi is not None and not 1 <= args.so_buoi <= 200 or not 1 <= args.phut <= 60:
         ap.error("--so-buoi trong khoảng 1–200, --phut trong khoảng 1–60")
+    if not 0 <= args.yen_lau <= 1 or args.yen_lau and args.so_buoi is None:
+        ap.error("--yen-lau trong khoảng 0–1 và chỉ dùng cùng --so-buoi")
+    parse_nhieu(args.nhieu)                                 # sai cú pháp thì báo ngay, trước khi tính
     plan_given = args.plan is not None
     args.plan = args.plan or KICH_BAN[args.kich_ban]
 
@@ -844,27 +976,33 @@ def main(argv=None):
     for k in range(args.so_buoi):                           # mỗi buổi một kịch bản ngẫu nhiên; 30 % buổi có khách
         one = argparse.Namespace(**vars(args))
         one.tag, one.seed = f"{args.tag}-{k + 1:02d}", args.seed + k
-        one.plan = random_plan(master, args.phut, guests=master.random() < 0.3)
+        one.plan = random_plan(master, args.phut, guests=master.random() < 0.3,
+                               long_still=args.yen_lau > 0 and master.random() < args.yen_lau)  # 0: không rút số
         out.append(simulate(one))
     print(f"Đã tạo {len(out)} buổi trong {Path(args.data_dir) / 'raw'}")
     return out
 
 
-def compute(plan, seed, rate=100, noise=0.05, operator=False):
-    """Chạy toàn bộ mô phỏng (không ghi file). Cùng plan + seed thì luôn ra cùng kết quả."""
+def compute(plan, seed, rate=100, noise=0.05, operator=False, nhieu=None):
+    """Chạy toàn bộ mô phỏng (không ghi file). Cùng plan + seed + nhieu thì luôn ra cùng kết quả."""
     rng = np.random.default_rng(seed)
     t, S, labels, spans = timeline(parse_plan(plan), rate, rng, operator)
     pts, s, shade = body_points(t, S, 1 / rate)
-    objects, burst = objects_for(seed), bursts_for(seed, len(t), rate)
+    objects, bursts = objects_for(seed), interference_for(seed, len(t), rate, nhieu)
     with ThreadPoolExecutor() as ex:                                            # 2 RX tính song song (numpy nhả GIL)
         chans = list(ex.map(lambda p: channel(p, pts, s, shade, objects), RX.values()))
-    rx_data = {b: like_esp32(H, H0, rng, noise, rate, burst) for b, (H, H0) in zip(RX, chans)}
+    wifi, khac = (burst_mask(t, bursts, (k,)) for k in NHIEU)
+    # Wi-Fi khác chỉ gây nhiễu khi khung chồng lên lúc thu → nhiễu tăng vừa (×1,5), 1–3 % gói hỏng hẳn;
+    # lò vi sóng… phủ cả dải → ×3 như bản trước. Cả hai là giá trị khởi đầu, chưa đo.
+    r = np.random.default_rng(seed + 54322)                                     # gói hỏng: dòng ngẫu nhiên riêng
+    rx_data = {b: like_esp32(H, H0, rng, noise, rate, 1 + 0.5 * wifi + 2 * khac,
+                             wifi & (r.random(len(t)) < r.uniform(0.01, 0.03))) for b, (H, H0) in zip(RX, chans)}
     return t, S, labels, spans, rx_data
 
 
 def simulate(args):
     print("Đang tính kênh truyền...")
-    t, S, labels, spans, rx_data = compute(args.plan, args.seed, args.rate, args.noise, args.nguoi_bam)
+    t, S, labels, spans, rx_data = compute(args.plan, args.seed, args.rate, args.noise, args.nguoi_bam, args.nhieu)
     d = write_session(args, t, rx_data, labels, spans)
     if args.hinh:
         save_figure(d, t, S, spans, rx_data)

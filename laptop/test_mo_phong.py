@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Tự kiểm tra mô phỏng, giao diện, nhịp thở và luồng logger → features: python test_mo_phong.py."""
+import contextlib
 import csv
+import io
+import json
 import tempfile
 from pathlib import Path
 
@@ -79,15 +82,18 @@ def test_bad_plan():
 
 def test_random_plans():
     rng = np.random.default_rng(0)
-    falls, sat = 0, 0
+    falls, sat, downs = 0, 0, []
     for k in range(40):
         plan = sim.random_plan(rng, 5, guests=k % 2 == 0)
         t, S, labels, _ = sim.timeline(sim.parse_plan(plan), 50, rng, operator=k % 3 == 0)   # không được báo lỗi
         assert 4.5 * 60 < t[-1] < 9 * 60, t[-1]
         falls += sum(1 for _, e, v in labels if (e, v) == ("ACTION", "FALL"))
         sat += int((S["h"][:, 1:3] < 0.8).any())
+        downs += [x for x in plan.split(",") if x.startswith("DOWN")]
     assert falls >= 20, f"kịch bản ngẫu nhiên quá ít lần ngã: {falls}"
     assert sat >= 3, f"khách dừng lâu phải ngồi xuống, chỉ thấy {sat} buổi"
+    moving = sum(x.endswith("~") for x in downs) / len(downs)
+    assert 0.2 < moving < 0.5, f"~35 % đoạn DOWN phải có cử động, thấy {moving:.0%}"
 
 
 def test_nhip_tho():
@@ -159,12 +165,95 @@ def test_variability():
     assert all(0 <= x <= 0.8 for x in lags) and 0.15 < np.mean(lags) < 0.45, lags
 
 
+def test_down_cu_dong():
+    """DOWN~: lúc cử động mạnh nhất CSI dao động rõ hơn lúc nằm bất động, nhưng không bao giờ đứng lên.
+    Phần lớn thời gian (giãy tay chân sát sàn) chỉ hơi nổi trên nhiễu; rõ nhất là lúc cố nhổm dậy."""
+    def win_std(im, re, a0):                                       # cửa sổ 1 s, làm mượt 0,1 s bỏ bớt nhiễu từng gói
+        amp = np.hypot(im[a0:].astype(float), re[a0:].astype(float))
+        c = np.cumsum(np.pad(amp, ((1, 0), (0, 0))), axis=0)
+        m = (c[10:] - c[:-10]) / 10
+        return m[:len(m) // 100 * 100].reshape(-1, 100, 52).std(axis=1).mean(axis=1)
+    peak, rise = {"": 0, "~": 0}, {"": 0, "~": 0}
+    for seed in range(3):
+        for tail in peak:
+            _, S, labels, spans, rx = sim.compute(f"ACTIVE:5,FALL,DOWN:60@15{tail}", seed, nhieu="tat")
+            a0 = int((next(a for n, a, _ in spans if n == "DOWN") + 1) * 100)
+            peak[tail] = max(peak[tail], np.mean([win_std(im, re, a0) for im, re, _ in rx.values()], axis=0).max())
+            rise[tail] = max(rise[tail], S["h"][a0:, 0].max())
+            assert (np.abs(S["limb"][a0:]).max() > 0.1) == bool(tail), "chỉ DOWN~ mới có tay chân giãy"
+            ev = {(e, v) for _, e, v in labels}
+            assert ("STATE", "DOWN") in ev and (("NOTE", "DOWN cu-dong") in ev) == bool(tail)
+    assert rise[""] == 0 and 0.15 < rise["~"] <= 0.4, f"DOWN~ cố nhổm dậy nhưng không lên quá ~0,4: {rise}"
+    assert peak["~"] > 1.5 * peak[""], peak
+    plan = "ACTIVE:5,+,FALL,DOWN:10@15~,-,STAND_UP,ACTIVE:3,FALL,DOWN:5"
+    spans = sim.timeline(sim.parse_plan(plan), 100, np.random.default_rng(0))[3]
+    d = [s[1:] for s in spans if s[0] == "DOWN"]
+    assert sim.down_cu_dong(plan, spans) == [[round(a, 3), round(b, 3)] for a, b in d[:1]], "sai đoạn DOWN~"
+    for bad in ("ACTIVE:5~", "STILL:5@12~", "FALL~"):
+        try:
+            sim.parse_plan(bad)
+        except SystemExit:
+            continue
+        raise AssertionError(f"~ chỉ dùng cho DOWN mà không báo lỗi: {bad}")
+
+
+def test_nhieu(tmp):
+    """Đợt Wi-Fi: n_filtered tăng vọt, mất gói, có gói hỏng; đợt lò vi sóng: noise_floor tăng; meta đủ trường mới."""
+    d = sim.main(["--tag", "nhieu", "--data-dir", tmp, "--seed", "3", "--nhieu", "tat,wifi@20:15,khac@40:3",
+                  "--plan", "EMPTY:50,ACTIVE:10,FALL,DOWN:20@15~,STAND_UP,ACTIVE:5"])
+    m = json.loads((Path(d) / "meta.json").read_text(encoding="utf-8"))["simulator"]
+    assert m["interference"] == [["wifi", 20.0, 35.0], ["khac", 40.0, 43.0]] and m["bursts_s"] == 18.0, m
+    down = [x[1:] for x in m["truth"] if x[0] == "DOWN"]
+    assert m["down_cu_dong"] == down and len(down) == 1, (m["down_cu_dong"], down)
+    rows, ht, amp = read_csi(d, "RX1")
+    rel = ht - m["t0_host"]
+    assert 0 < rel[0] < 0.05, "t0_host phải là host_time của giây 0 mô phỏng"
+    stat = [(float(r["host_time"]) - m["t0_host"], int(r["n_rx"]), int(r["n_filtered"]))
+            for r in csv.DictReader(open(Path(d) / "stat.csv", encoding="utf-8")) if r["board"] == "RX1"]
+    wifi = [s for s in stat if 20.5 < s[0] < 35.5]                  # STAT giây k tính các gói trong [k-1, k)
+    calm = [s for s in stat if s[0] < 19.5 or s[0] > 44.5]
+    assert min(s[2] for s in wifi) >= 20 and max(s[2] for s in calm) <= 5, "n_filtered phải tăng vọt trong đợt Wi-Fi"
+    assert np.mean([s[1] for s in wifi]) < np.mean([s[1] for s in calm]) - 3, "đợt Wi-Fi phải làm mất gói"
+    nf = np.array([int(r["noise_floor"]) for r in rows])
+    assert (nf[(rel > 40.01) & (rel < 42.99)] == -85).all() and (nf[(rel < 39.9) | (rel > 43.1)] == -95).all()
+    jump = np.abs(np.log(amp.mean(axis=1) / np.median(amp[rel < 20].mean(axis=1)))) > np.log(1.8)
+    w = (rel > 20) & (rel < 35)
+    assert 0.003 < jump[w].mean() < 0.05 and jump[rel < 20].mean() < 0.002, "1–3 % gói hỏng, chỉ trong đợt Wi-Fi"
+    for bad in ("wifi@60", "abc@1:2", "wifi@-1:3", "wifi@5:0", "wifi@x:3", "khac@5:3:1"):
+        try:
+            sim.parse_nhieu(bad)
+        except SystemExit:
+            continue
+        raise AssertionError(f"--nhieu sai cú pháp mà không báo lỗi: {bad}")
+
+
+def test_bat_dong():
+    """Có dữ liệu thử cảnh báo bất động lâu: kịch bản bat-dong, --yen-lau cho buổi ngẫu nhiên (mặc định tắt)."""
+    still = lambda plan: max([d for n, d, _ in sim.parse_plan(plan) if n == "STILL"], default=0)
+    assert still(sim.KICH_BAN["bat-dong"]) >= 360
+    rng = np.random.default_rng(1)
+    for _ in range(10):
+        plan = sim.random_plan(rng, 5, long_still=True)
+        assert 240 <= still(plan) <= 480, plan
+        sim.timeline(sim.parse_plan(plan), 20, rng)                  # kịch bản hợp lệ
+    assert max(still(sim.random_plan(rng, 5)) for _ in range(20)) <= 60, "mặc định không có đoạn yên dài"
+    for argv in (["--yen-lau", "0.5"], ["--yen-lau", "2", "--so-buoi", "1"]):
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):            # argparse in lỗi ra stderr – ở đây là lỗi cố ý
+                sim.main(["--tag", "x", *argv])
+        except SystemExit:
+            continue
+        raise AssertionError(f"tham số sai mà không báo lỗi: {argv}")
+
+
 def test_ui():
     import mo_phong_ui as ui
-    r = ui.run({"kich_ban": "tu-viet", "plan": "EMPTY:5,ACTIVE:10,+,FALL,DOWN:10@15", "nguoi_bam": True})
+    r = ui.run({"kich_ban": "tu-viet", "plan": "EMPTY:5,ACTIVE:10,+,FALL,DOWN:10@15~", "nguoi_bam": True})
     n = len(r["count"])
     assert n == len(r["x"][0]) == len(r["amp"]["RX1"]) and max(r["count"]) == 2, "khách + người được giám sát = 2"
     assert len(__import__("base64").b64decode(r["heat"]["RX1"])) % 52 == 0
+    assert len(r["down_cu_dong"]) == 1 and all(k in sim.NHIEU and a < b for k, a, b in r["interference"])
+    assert set(ui.PRESETS) == set(sim.KICH_BAN), "mỗi kịch bản có sẵn phải có tên trên giao diện"
     for bad in ({"seed": -1}, {"noise": 1}, {"kich_ban": "khong-co"}, {"kich_ban": "tu-viet", "plan": ""}):
         try:
             ui.params(bad)
@@ -175,9 +264,10 @@ def test_ui():
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
-        for test in (test_file_format, test_motion_vs_empty, test_breathing_peak, test_pipeline, test_batch):
+        for test in (test_file_format, test_motion_vs_empty, test_breathing_peak, test_pipeline, test_batch, test_nhieu):
             test(tmp)
             print("ĐẠT", test.__name__)
-    for test in (test_bad_plan, test_random_plans, test_physics, test_variability, test_nhip_tho, test_ui):
+    for test in (test_bad_plan, test_random_plans, test_physics, test_variability, test_down_cu_dong, test_bat_dong,
+                 test_nhip_tho, test_ui):
         test()
         print("ĐẠT", test.__name__)
