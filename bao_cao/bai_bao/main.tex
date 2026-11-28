@@ -1,0 +1,229 @@
+% Bài báo PBL3 nhóm 8 – bản nháp. Mẫu IEEE conference, tiếng Việt.
+% Biên dịch: tectonic -X compile main.tex   (hoặc Overleaf, Compiler = XeLaTeX)
+% \canlam{...} (chữ đỏ) = chỗ còn thiếu số liệu / cần kiểm tra; bỏ hết trước khi nộp.
+% Số liệu mô phỏng lấy từ laptop/README.md (mục Cảnh báo), firmware/thu_mo_hinh/README.md.
+\documentclass[conference]{IEEEtran}
+\usepackage{fontspec}
+% TeX Gyre: giống Times/Helvetica/Courier của IEEE, đủ dấu tiếng Việt; gọi theo tên file để chạy được cả trên
+% tectonic lẫn Overleaf
+\setmainfont{texgyretermes}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\setsansfont{texgyreheros}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\setmonofont{texgyrecursor}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\usepackage{amsmath,booktabs,array,xcolor,graphicx,url}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+\newcommand{\canlam}[1]{\textcolor{red}{[#1]}}
+% tên phần theo tiếng Việt
+\renewcommand{\abstractname}{Tóm tắt}
+\renewcommand{\IEEEkeywordsname}{Từ khoá}
+\renewcommand{\tablename}{Bảng}
+\renewcommand{\figurename}{Hình}
+\renewcommand{\refname}{Tài liệu tham khảo}
+
+\begin{document}
+
+\title{Giám sát an toàn người ở nhà một mình\\bằng thông tin trạng thái kênh Wi‑Fi trên ESP32}
+
+\author{\IEEEauthorblockN{Lê Minh Chiến, Nguyễn Thị Hà Tiên, Nguyễn Quang Phúc}
+\IEEEauthorblockA{Khoa Điện tử và Trí tuệ nhân tạo, Trường Đại học Bách khoa – Đại học Đà Nẵng\\
+Lớp 23KTMT2 · Nhóm 8 PBL3 Mạng máy tính}}
+
+\maketitle
+
+\begin{abstract}
+Người sống một mình có thể bị ngã, bất động lâu hoặc thở bất thường mà không ai biết để giúp kịp. Bài báo đề xuất một
+hệ thống giám sát không dùng camera, không cần đeo thiết bị, chỉ dựa vào thông tin trạng thái kênh (CSI) Wi‑Fi đo bằng
+các board ESP32 giá rẻ: một ESP32‑C3 phát gói ESP‑NOW và hai ESP32‑S3 thu CSI. Xử lý chia thành bốn tầng: trạng thái
+phòng, số người, động tác (gồm ngã) và nhịp thở; kết quả đưa vào bộ cảnh báo theo sự kiện có bước xác nhận. Mỗi
+ESP32‑S3 tự chạy mô hình XGBoost trên bộ đặc trưng gọn (19 và 25 cột) rồi gộp kết quả hai board theo cách gộp muộn.
+Trên 40 buổi mô phỏng (4,3 giờ), hệ thống phát hiện 44/53 lần ngã (83\,\%) với 5,1 lần báo ngã giả mỗi giờ; mô hình
+động tác chạy trên ESP32‑S3 thật mất khoảng 82\,ms mỗi window. \canlam{Bổ sung kết quả so với baseline và kết quả trên
+dữ liệu thật.}
+\end{abstract}
+
+\begin{IEEEkeywords}
+Wi‑Fi sensing, CSI, ESP32, phát hiện ngã, nhịp thở, XGBoost, edge AI
+\end{IEEEkeywords}
+
+% =====================================================================================================================
+\section{Giới thiệu}
+Số người cao tuổi sống một mình ngày càng tăng \canlam{dẫn số liệu}. Với họ, các sự cố như ngã mà không tự đứng dậy
+được, ngất, đột quỵ hay rối loạn hô hấp đặc biệt nguy hiểm vì không có ai bên cạnh. Camera giải quyết được bài toán nhưng
+xâm phạm riêng tư; vòng tay, đồng hồ thông minh thì phụ thuộc vào việc người dùng nhớ đeo và sạc.
+
+Wi‑Fi sensing tận dụng việc cơ thể người làm thay đổi đường lan truyền của sóng giữa máy phát và máy thu. Thông tin
+trạng thái kênh (Channel State Information – CSI) mô tả biên độ và pha trên từng sóng mang con OFDM, nhạy với cả cử động
+lớn (đi lại, ngã) lẫn dao động nhỏ của lồng ngực khi thở. Các board ESP32 cho phép đọc CSI với chi phí rất thấp.
+
+Đóng góp của bài báo gồm:
+\begin{itemize}
+  \item Một pipeline bốn tầng biến CSI thành \emph{sự kiện cảnh báo} (ngã, ngã khẩn cấp, bất động lâu, thở bất thường,
+    ngưng thở), với bước xác nhận 10\,s và cơ chế xử lý khi kênh bị thiết bị khác chiếm.
+  \item Bộ đặc trưng gọn (19 cột cho window 6\,s, 25 cột cho window 3\,s) thay cho thống kê trên từng sóng mang con,
+    đủ nhỏ để mỗi ESP32‑S3 tự chạy mô hình – bước mà \cite{natarajan2023} mới đề xuất – và kiểm chứng trên board
+    thật.
+  \item Gộp muộn kết quả của hai board theo nguyên tắc an toàn: ngã chỉ cần một board thấy, chế độ nhiều người cần cả
+    hai cùng thấy.
+  \item Đánh giá theo sự kiện (tỉ lệ bắt được, báo giả mỗi giờ, độ trễ) và so sánh với các phương pháp gốc.
+    \canlam{hoàn thiện khi có bảng baseline}
+\end{itemize}
+
+% =====================================================================================================================
+\section{Các nghiên cứu liên quan}
+\textbf{Phát hiện chuyển động bằng RSSI và CSI trên thiết bị IoT.} Natarajan và cộng sự \cite{natarajan2023} thu RSSI
+và CSI bằng laptop, điện thoại và ESP32 (nghe khung của router) tại hai toà nhà, tạo sáu bộ dữ liệu; mỗi window không
+chồng lấn được mô tả bằng bốn đại lượng độ phân tán (phương sai, MAD, range, IQR) trên từng sóng mang con, sau khi khử
+nhiễu wavelet Daubechies. Mô hình hai tầng gồm Random Forest, Gradient Boosting, XGBoost ở tầng 1 và bộ bỏ phiếu có
+trọng số (cứng và mềm) ở tầng 2. Độ chính xác kiểm định chéo trung bình đạt tới 99,7\,\% khi có tầm nhìn thẳng và
+97,8\,\% khi xuyên tường; RSSI xuyên tường có bộ chỉ đạt 75\,\%, và giảm ít nhất 21,2\,\% khi có nhiều người, trong khi
+CSI giữ ổn định. Các mô hình chiếm dưới 1\,MB và được đề xuất là có thể đưa lên thiết bị biên, nhưng bài chưa chạy mô
+hình trên ESP32 và chỉ phân biệt có người đi lại hay phòng trống.
+
+\textbf{Dữ liệu công khai trên ESP32‑S3.} WiFall \cite{wifall} do router nhà phát và ESP32‑S3 thu (100\,Hz, 52 sóng mang
+con), gồm đi, nhảy, ngồi, đứng dậy và năm kiểu ngã của 10 tình nguyện viên. Trong kịch bản khác người (train trên 9
+người, một mẫu mỗi lớp của người thứ 10), KNN‑MMD đạt 77,62\,\% phát hiện ngã và 75,30\,\% nhận dạng động tác; ResNet18
+train cùng miền đạt 91,88\,\% và 70,50\,\%. CSI‑BERT2 \cite{csibert2} báo 94,79\,\% phát hiện ngã, 88,59\,\% nhận dạng
+động tác trên WiFall và 94,32\,\% đếm 0–3 người trên WiCount \canlam{kiểm tra Bảng V và cách chia train/test}. Các mô
+hình này là mạng học sâu chạy trên máy tính; không có luật cảnh báo, bước xác nhận sau ngã hay đo nhịp thở.
+
+\textbf{Gộp nhiều đường truyền.} Chang và cộng sự \cite{fusion2016} nhận dạng 7 hành động bằng CSI của card Intel 5300
+với bốn cặp anten phát–thu. Gộp muộn (mỗi cặp một bộ phân loại, cộng xác suất) đạt 77,45\,\% và 86,96\,\% trên hai bộ
+dữ liệu, cao hơn gộp sớm (ghép đặc trưng vào một bộ phân loại) với 70,24\,\% và 80,23\,\% (kiểm định chéo 10 lần).
+
+\textbf{Đo nhịp thở bằng CSI của ESP32.} COVID‑Beat \cite{covidbeat} dùng một cặp ESP32, chọn các sóng mang con dao động
+mạnh nhất, lọc dải rồi tìm đỉnh phổ; độ chính xác ước lượng nhịp thở từ 91\,\% đến 99\,\% trên 5 người. Burimas và cộng
+sự \cite{appsci2024} đo nhịp thở khi ngủ bằng ESP32 ở các mức thở bình thường, nhanh và chậm \canlam{trích sai số công
+bố}.
+
+\textbf{Ngưỡng nhịp thở.} Thang NEWS2 \cite{news2} cho 3 điểm (mức nguy hiểm nhất của một chỉ số) khi nhịp thở $\le 8$
+hoặc $\ge 25$ lần/phút, 0 điểm ở 12–20 lần/phút; đây là căn cứ chọn ngưỡng cảnh báo của hệ thống.
+
+% =====================================================================================================================
+\section{Hệ thống đề xuất}
+\subsection{Phần cứng và thu dữ liệu}
+Một ESP32‑C3 (TX) phát gói ESP‑NOW broadcast 100 gói/s trên một kênh cố định, băng thông 20\,MHz. Hai ESP32‑S3 (RX1,
+RX2) đặt ở hai cạnh của khu theo dõi, cùng thu CSI của mỗi gói; CSI chỉ lấy phần LLTF, cho 52 sóng mang con hữu ích.
+Mỗi RX lọc theo địa chỉ MAC của TX và đếm số khung của thiết bị khác trên kênh ($n_\text{filtered}$) để biết kênh có bị
+chiếm hay không.
+
+\subsection{Pipeline bốn tầng}
+\begin{itemize}
+  \item \textbf{Tầng 0} (window 6\,s, trượt 1\,s): phân loại phòng Trống / Hoạt động / Yên.
+  \item \textbf{Tầng 1} (window 6\,s): 1 người hay $\ge 2$ người; phân vân thì chọn 1 để không tắt nhầm phát hiện ngã.
+  \item \textbf{Tầng 2a} (window 3\,s, trượt 0,5\,s, chỉ khi 1 người): ngã, ngồi xuống, đứng dậy, nằm xuống, cúi nhặt,
+    không có động tác. Bốn động tác thường được học riêng vì dễ nhầm với ngã.
+  \item \textbf{Tầng 2b} (window 30\,s, trượt 5\,s, khi Yên): nhịp thở bằng lọc dải, PCA trên các sóng mang con, phổ
+    Welch; chỉ chấp nhận đỉnh có độ nổi (đỉnh chia trung vị phổ) vượt ngưỡng.
+\end{itemize}
+
+\subsection{Đặc trưng và mô hình}
+Thay vì 4 thống kê trên từng sóng mang con (212 cột mỗi board như \cite{natarajan2023}), window 6\,s dùng 19 cột: 4
+thống kê trên RSSI, mức tín hiệu chung và hai thành phần chính PC1, PC2, cùng năng lượng dải thở và tỉ lệ gói hỏng.
+Window 3\,s dùng 25 cột: năng lượng 5 dải tần 0,3–40\,Hz của PC1, đặc trưng hình dạng và số gói tốt. Mỗi tầng dùng
+XGBoost 300 vòng, độ sâu 4 (6\,s) và 5 (động tác), trọng số cân bằng lớp.
+
+\subsection{Gộp kết quả hai board}
+Mỗi RX tự chạy mô hình trên CSI của nó và gửi xác suất về trạm chính. Xác suất ngã lấy \emph{max} (một board thấy là
+đủ), xác suất nhiều người lấy \emph{min} (cả hai cùng thấy), mức hoạt động và động tác lấy trung bình, nhịp thở lấy
+board có đỉnh phổ nổi nhất.
+
+\subsection{Bộ cảnh báo theo sự kiện}
+Ngã được báo khi thấy động tác ngã và 10\,s sau người chưa đứng dậy; huỷ khi thấy đứng dậy hoặc Hoạt động liên tục suốt
+10\,s. Giây kênh bận ($n_\text{filtered} > 30$ hoặc $< 85$ gói/s) không được dùng để huỷ; hệ thống chờ kênh sạch tối đa
+60\,s rồi vẫn báo. Bất động lâu: Yên liên tục $\ge 5$ phút. Thở bất thường: $> 25$ hoặc $< 8$ nhịp/phút. Ngưng thở: 3
+cửa sổ liên tiếp không thấy nhịp sau khi đã đo được. Ngã mà không thấy cử động lẫn nhịp thở: cảnh báo khẩn cấp.
+
+% =====================================================================================================================
+\section{Thực nghiệm}
+\subsection{Dữ liệu}
+\begin{itemize}
+  \item \textbf{Mô phỏng 3D}: đúng bố trí 1 TX + 2 RX; đi lại, ngồi, đứng, nằm, cúi nhặt, 3 kiểu ngã, ngã rồi giãy, thở
+    8–36 nhịp/phút, nín thở, khách vào ra, nhiễu kênh; nhiễu và AGC hiệu chỉnh theo WiFall. 40 buổi, 4,3 giờ.
+  \item \textbf{WiFall} \cite{wifall}: 928 đoạn 3\,s, dùng làm benchmark cho tầng động tác.
+  \item \textbf{Dữ liệu thật của nhóm}: \canlam{mô tả phòng, số buổi, kịch bản, số lần lặp, cách lấy nhịp đáp án}.
+\end{itemize}
+
+\subsection{Cách đánh giá}
+Chia train/test theo buổi (GroupKFold 5 lượt). Buổi test tính đặc trưng trượt từ dữ liệu thô, không dùng nhãn, như lúc
+chạy thật. Ngã được tính là bắt được nếu có cảnh báo trong 30\,s.
+
+\subsection{Baseline}
+\canlam{Mỗi baseline chạy trên cùng dữ liệu, cùng cách chia:}
+\begin{itemize}
+  \item Phương pháp đầy đủ của \cite{natarajan2023}: 212 cột/board, bỏ phiếu RF + GB + XGBoost.
+  \item Chỉ dùng RSSI; chỉ dùng 1 RX; gộp sớm đặc trưng hai board.
+  \item Phát hiện ngã bằng ngưỡng năng lượng; nhịp thở bằng FFT trên một sóng mang con.
+\end{itemize}
+
+% =====================================================================================================================
+\section{Kết quả}
+\subsection{Bộ cảnh báo trên mô phỏng}
+Bảng~\ref{tab:vong} cho kết quả qua ba vòng tối ưu (cách gộp muộn, có cờ kênh).
+
+\begin{table}[t]
+\caption{Kết quả theo sự kiện trên 40 buổi mô phỏng}
+\label{tab:vong}
+\centering\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+ & Vòng 1 & Vòng 2 & Vòng 3 \\
+\midrule
+Ngã bắt được (/53) & 34 & 39 & \textbf{44} \\
+Báo ngã giả (lần/giờ) & 14 & 6,7 & \textbf{5,1} \\
+Bất động lâu bắt được (/8) & 3 & 5 & 5 \\
+Thở bất thường bắt được (/21) & 8 & 2 & 6 \\
+Nín thở bắt được (/12) & 5 & 1 & 1 \\
+Lỗi đếm người nguy hiểm & 0,3\,\% & 0,4\,\% & 0,1\,\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{So với baseline}
+\canlam{Bảng: độ chính xác / F1 / bắt ngã / báo giả của từng baseline và của nhóm, trung bình ± độ lệch qua nhiều seed;
+kèm số cột và số nút cây.}
+
+\subsection{Chạy trên ESP32‑S3}
+Trên ESP32‑S3 N16R8 (240\,MHz), mô hình động tác cho cùng lớp với Python ở 40/40 window đối chiếu. Tính 25 cột mất
+69\,ms, chạy mô hình 13\,ms mỗi window; với bước trượt 0,5\,s chiếm khoảng 16\,\% một nhân. \canlam{đo thêm khi vừa thu
+CSI vừa tính, và hai mô hình 6\,s}
+
+\subsection{Dữ liệu thật}
+\canlam{Kết quả theo từng tình huống: đứng/ngồi/nằm yên ở giữa phòng, gần và xa đường sóng; ngã và động tác dễ nhầm;
+nhịp thở so với metronome.}
+
+% =====================================================================================================================
+\section{Thảo luận và hạn chế}
+\begin{itemize}
+  \item Kết quả hiện chủ yếu trên mô phỏng; mô hình train trên mô phỏng chạy kém trên dữ liệu thật đầu tiên (hay gọi
+    người ngồi yên là phòng trống), nên cần train lại trên dữ liệu thật.
+  \item Nhịp thở và ngưng thở còn yếu; cần khoảng 40\,s mới báo ngưng thở, dài hơn định nghĩa y khoa ($\ge 10$\,s).
+  \item Chỉ một phòng, một bố trí board; chưa đánh giá khi đổi phòng.
+\end{itemize}
+
+\section{Kết luận}
+\canlam{Viết sau khi có kết quả baseline và dữ liệu thật.}
+
+% =====================================================================================================================
+\begin{thebibliography}{9}
+\bibitem{natarajan2023} A. Natarajan, V. Krishnasamy, and M. Singh, ``A machine learning approach to passive human
+  motion detection using WiFi measurements from commodity IoT devices,'' \emph{IEEE Trans. Instrum. Meas.}, vol. 72,
+  Art. no. 2512510, 2023, doi: 10.1109/TIM.2023.3272374.
+\bibitem{wifall} Z. Zhao, Z. Cai, T. Chen, X. Li, H. Li, Q. Chen, and G. Zhu, ``KNN‑MMD: Cross domain wireless sensing
+  via local distribution alignment,'' arXiv:2412.04783, 2024.
+\bibitem{csibert2} Z. Zhao, F. Meng, Z. Lyu, H. Li, X. Li, and G. Zhu, ``CSI‑BERT2: A BERT‑inspired framework for
+  efficient CSI prediction and classification in wireless communication and sensing,'' \emph{IEEE Trans. Mobile
+  Comput.}, 2025, doi: 10.1109/TMC.2025.3640420.
+\bibitem{fusion2016} J.-Y. Chang, K.-Y. Lee, Y.-L. Wei, K. C.-J. Lin, and W. Hsu, ``We can `see' you via Wi‑Fi – WiFi
+  action recognition via vision‑based methods,'' arXiv:1608.05461, 2016.
+\bibitem{covidbeat} M. Atif, S. Muralidharan, H. Ko, and B. Yoo, ``COVID‑Beat: a low‑cost breath monitoring approach
+  for people in quarantine during the pandemic,'' \emph{J. Comput. Des. Eng.}, vol. 9, no. 3, pp. 992–1006, 2022,
+  doi: 10.1093/jcde/qwac037.
+\bibitem{appsci2024} R. Burimas, T. Horanont, A. Thapa, and B. R. Lamichhane, ``Monitoring the sleep respiratory rate
+  with low‑cost microcontroller Wi‑Fi in a controlled environment,'' \emph{Appl. Sci.}, vol. 14, no. 15, Art. no. 6458,
+  2024, doi: 10.3390/app14156458.
+\bibitem{news2} Royal College of Physicians, \emph{National Early Warning Score (NEWS) 2: Standardising the assessment
+  of acute‑illness severity in the NHS}, London, 2017.
+\bibitem{espcsi} Espressif Systems, ``esp‑csi,'' \url{https://github.com/espressif/esp-csi}.
+\end{thebibliography}
+
+\end{document}

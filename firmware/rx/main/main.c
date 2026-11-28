@@ -144,7 +144,11 @@ void app_main(void)
         .lltf_en = true, .htltf_en = false, .stbc_htltf2_en = false, .ltf_merge_en = false,
         .channel_filter_en = false, .manu_scale = false, .shift = 0,
     };
-    ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));   // nhận cả khung không gửi cho mình → n_filtered đo kênh bận
+    // Nhận cả khung không gửi cho mình → n_filtered đo kênh bận. Thiếu bộ lọc MASK_ALL thì CSI không báo khung data
+    // của máy khác (đo 26/11: kênh có router, n_filtered luôn 0).
+    wifi_promiscuous_filter_t loc = {.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL};
+    ESP_ERROR_CHECK(esp_wifi_set_promiscuous_filter(&loc));
+    ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));
     ESP_ERROR_CHECK(esp_wifi_set_csi_config(&csi));
     ESP_ERROR_CHECK(esp_wifi_set_csi_rx_cb(csi_cb, NULL));
     ESP_ERROR_CHECK(esp_wifi_set_csi(true));

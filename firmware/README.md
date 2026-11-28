@@ -29,6 +29,7 @@ idf.py -p /dev/ttyACM0 flash           # S3: phải cắm cổng USB gốc (USB 
 Kiểm tra: `python laptop/logger.py --rx-port /dev/ttyACM0 --tag thu --duration 20`, rồi `kiem_tra_buoi_thu.py`.
 
 **Đo 26/11/2026** (1 TX C3 + 1 RX S3 cắm cùng laptop, kênh 6): RX nhận 99–100 dòng `CSI`/s, `n_queue_drop` 0,
-logger không mất dòng; `len` 128, `sig_mode` 1, `cwb` 0, RSSI khoảng −44 dBm. `n_filtered` = 0 suốt buổi
-(chưa rõ do kênh 6 sạch hay do CSI không báo khung của máy khác – cần thử khi có Wi‑Fi khác cùng kênh).
+logger không mất dòng; `len` 128, `sig_mode` 1, `cwb` 0, RSSI khoảng −44 dBm. Ban đầu `n_filtered`
+luôn 0 kể cả trên kênh có router: thiếu `esp_wifi_set_promiscuous_filter(MASK_ALL)` thì CSI không báo khung data của
+máy khác. Sửa xong: kênh 4 (router nhà) 6–24 khung/s, kênh 6 2–22 khung/s, `n_rx` vẫn ~99.
 Chưa thử: RX2 cùng lúc (`rx_seq` hai RX có khớp không), chạy lâu, khoảng cách xa.
