@@ -1,0 +1,121 @@
+% beamerthemenhom8.sty – theme tối giản cho báo cáo PBL3 nhóm 8
+% Một màu chủ đạo (navy), xám cho chữ phụ, một màu nhấn (cam) chỉ dùng cho cảnh báo / điểm yếu.
+% Biên dịch bằng XeTeX (tectonic). Font: Arial trên Windows, Liberation Sans nếu không có Arial.
+\ProvidesPackage{beamerthemenhom8}
+
+% ---------------------------------------------------------------- gói
+\RequirePackage{fontspec}
+\RequirePackage{newunicodechar}
+\RequirePackage{tikz}
+\usetikzlibrary{calc,positioning,arrows.meta}
+\RequirePackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\RequirePackage{tabularx,booktabs,array,colortbl}
+
+% ---------------------------------------------------------------- font
+\IfFontExistsTF{Arial}{\setsansfont{Arial}}{\setsansfont{Liberation Sans}}
+% ký tự Arial có thể thiếu: thay bằng cách vẽ tương đương
+\newunicodechar{‑}{\mbox{-}}
+\newunicodechar{⁻}{\textsuperscript{−}}
+\newunicodechar{⁷}{\textsuperscript{7}}
+
+% ---------------------------------------------------------------- màu
+\definecolor{navy}{HTML}{1F3B5C}     % màu chủ đạo: tiêu đề, khung nhấn, mũi tên chính
+\definecolor{chu}{HTML}{000000}      % chữ thường: đen
+\definecolor{xam}{HTML}{000000}      % chữ phụ: cũng đen
+\definecolor{muiten}{HTML}{6B7079}   % mũi tên, đường nối
+\definecolor{xamnhat}{HTML}{A3A8B0}  % chữ mờ, đường phụ
+\definecolor{duong}{HTML}{D4D7DC}    % viền khung, kẻ bảng
+\definecolor{nen}{HTML}{F4F5F7}      % nền rất nhạt (dùng ít)
+\definecolor{nhat}{HTML}{C9D1DC}     % cột biểu đồ
+\definecolor{cam}{HTML}{A8432F}      % nhấn: cảnh báo, điểm yếu
+
+\setbeamercolor{normal text}{fg=chu,bg=white}
+\setbeamercolor{structure}{fg=navy}
+\setbeamercolor{alerted text}{fg=cam}
+\setbeamercolor{frametitle}{fg=navy}
+\setbeamercolor{itemize item}{fg=chu}
+\setbeamercolor{itemize subitem}{fg=chu}
+
+% ---------------------------------------------------------------- khung trang
+\setbeamersize{text margin left=11mm,text margin right=11mm}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{headline}{}
+
+% tên mục hiện ở chân trang: \muc{1. Bài toán và mục tiêu}
+\def\nhom@muc{}
+\newcommand{\muc}[1]{\gdef\nhom@muc{#1}}
+
+\setbeamertemplate{frametitle}{%
+  \vskip5mm
+  {\fontsize{14}{17}\selectfont\bfseries\color{navy}\insertframetitle\par}
+  \nointerlineskip\vskip2.2mm
+  \hbox{\color{navy}\vrule width12mm height0.9pt depth0pt}%
+  \vskip1mm}
+
+% chân trang: trái là tên nhóm, phải là số trang (\muc giữ lại nhưng không in)
+\setbeamertemplate{footline}{%
+  \hbox to\paperwidth{\hskip11mm
+    {\fontsize{6.5}{8}\selectfont\color{xamnhat}Nhóm 8 · PBL3 Mạng máy tính\hfill
+     \insertframenumber\,/\,\inserttotalframenumber}%
+    \hskip11mm}%
+  \vskip4mm}
+
+% ---------------------------------------------------------------- danh sách
+\setbeamertemplate{itemize item}{\color{chu}-}
+\setbeamertemplate{itemize subitem}{\color{chu}-}
+\setbeamertemplate{itemize/enumerate body begin}{\setlength{\itemsep}{1.1mm}}
+\setlength{\leftmargini}{4.5mm}
+
+% ---------------------------------------------------------------- bảng
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcommand{\tde}[1]{{\color{navy}\bfseries #1}}
+\setlength{\heavyrulewidth}{0.6pt}
+\setlength{\lightrulewidth}{0.35pt}
+\setlength{\aboverulesep}{1.2mm}\setlength{\belowrulesep}{1.2mm}% kẻ ngang ôm sát chữ, giống bảng thường
+\arrayrulecolor{xamnhat}
+
+% ---------------------------------------------------------------- chữ dựng sẵn
+% tiêu đề nhỏ trong slide
+\newcommand{\daumuc}[1]{{\color{navy}\bfseries\small #1\par}\vskip1.2mm}
+% ghi chú: vạch dọc navy bên trái
+\newcommand{\ghichu}[1]{\par\noindent\begin{tikzpicture}
+    \node[inner sep=0pt,text width=\linewidth-3.5mm,align=flush left,font=\footnotesize,anchor=north west] (g) at (3.5mm,0) {#1};
+    \draw[navy,line width=1pt] (0,0) -- (0,0 |- g.south);
+  \end{tikzpicture}\par}
+% số liệu nổi bật: \theso[màu]{số}{giải thích}
+\newcommand{\theso}[3][navy]{{\setlength{\parskip}{0pt}%
+  {\color{#1}\fontsize{17}{20}\selectfont\bfseries #2\par}\vskip0.8mm
+  {\scriptsize\color{xam}#3\par}}}
+
+% ---------------------------------------------------------------- TikZ
+\tikzset{
+  hop/.style={draw=duong,line width=0.5pt,fill=white,rounded corners=1.2pt,align=center,
+    inner sep=1.6mm,minimum height=9mm,text=chu},
+  hopnhan/.style={hop,draw=navy,line width=0.6pt},
+  hopcam/.style={hop,draw=cam,line width=0.6pt},
+  mui/.style={-{Stealth[length=1.6mm,width=1.2mm]},draw=muiten,line width=0.5pt},
+  muimo/.style={draw=xamnhat,line width=0.5pt,dash pattern=on 2pt off 1.5pt},
+  nhanmui/.style={font=\tiny,text=xam,inner sep=0.8mm},
+}
+% hình người đơn giản đặt tại toạ độ #1
+\newcommand{\nguoi}[1]{%
+  \begin{scope}[shift={(#1)},navy,line width=0.8pt,line cap=round]
+    \draw (0,4.2mm) circle (1.2mm);
+    \draw (0,2.8mm) -- (0,-1.2mm);
+    \draw (-2mm,1.2mm) -- (0,2.2mm) -- (2mm,1.2mm);
+    \draw (-1.5mm,-4.4mm) -- (0,-1.2mm) -- (1.5mm,-4.4mm);
+  \end{scope}}
+
+% ---------------------------------------------------------------- biểu đồ
+\pgfplotsset{nhom8/.style={
+  axis lines*=left, axis line style={xamnhat}, tick style={draw=none},
+  tick label style={font=\tiny,text=xam}, title style={font=\scriptsize\bfseries,text=navy,yshift=-1mm},
+  ymajorgrids, grid style={duong,line width=0.3pt},
+  every node near coord/.append style={font=\tiny,text=chu},
+  legend style={font=\tiny,draw=none,fill=none},
+  % số trên trục in bằng font chữ thường (không dùng font toán có chân), dấu thập phân là dấu phẩy
+  /pgf/number format/assume math mode=true, /pgf/number format/use comma, /pgf/number format/1000 sep={},
+}}
+
+\mode<all>
